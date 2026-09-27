@@ -195,8 +195,7 @@ func (m Model) seekPreview(delta float64) (Model, tea.Cmd) {
 
 func (m Model) togglePreviewMode() (Model, tea.Cmd) {
 	m.preview.resultMode = !m.preview.resultMode
-	lo, hi := m.previewRange()
-	m.preview.time = clampFloat(m.preview.time, lo, hi)
+	m = m.clampPreviewTime()
 	return m.requestRender()
 }
 
@@ -278,12 +277,24 @@ func (m Model) setTrimBound(isStart bool) (Model, tea.Cmd) {
 
 // maybeRerenderResult requests a fresh render after a pipeline edit, but
 // only when the preview is showing the result (the original frame is
-// unaffected by pipeline changes).
+// unaffected by pipeline changes). An edit can shrink the result's
+// playable range (a Trim step, a faster Speed), so the preview position
+// itself is clamped into the new range first: the info line, playback and
+// i/o all read it, not just the render.
 func (m Model) maybeRerenderResult() (Model, tea.Cmd) {
 	if m.mode != modeMain || !m.preview.resultMode {
 		return m, nil
 	}
+	m = m.clampPreviewTime()
 	return m.requestRender()
+}
+
+// clampPreviewTime clamps the preview position into the current preview
+// mode's playable range.
+func (m Model) clampPreviewTime() Model {
+	lo, hi := m.previewRange()
+	m.preview.time = clampFloat(m.preview.time, lo, hi)
+	return m
 }
 
 func colorProfileString(p colorprofile.Profile) string {

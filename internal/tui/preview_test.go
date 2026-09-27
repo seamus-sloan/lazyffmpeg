@@ -478,6 +478,58 @@ func TestResultModeRerenderClampsPreviewTimeIntoNewRange(t *testing.T) {
 	}
 }
 
+func TestResultModeEditClampsThePreviewPositionItself(t *testing.T) {
+	fn, _ := fakeRenderer("F", nil)
+	m := step(t, New(testSession(pipeline.New()), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = step(t, m, key("v"))
+	for i := 0; i < 6; i++ {
+		m = step(t, m, key("L"))
+	}
+	if m.preview.time != 30 {
+		t.Fatalf("setup: position = %vs, want 30s", m.preview.time)
+	}
+
+	m = openMenu(t, m, pipeline.KindTrim)
+	m = typeText(m, "1-3")
+	m = step(t, m, key("enter"))
+
+	if m.preview.time != 3 {
+		t.Errorf("position after trimming to 1-3 = %vs, want 3s (clamped to the range end)", m.preview.time)
+	}
+	if out := viewText(m); !strings.Contains(out, "00:03 / 00:33") {
+		t.Errorf("info line does not show the clamped position:\n%s", out)
+	}
+
+	m = step(t, m, key("o"))
+	tr, _ := m.pipeline.Find(pipeline.KindTrim)
+	if got := tr.(pipeline.Trim); got.Start != 1 || got.End != 3 {
+		t.Errorf("o after the range shrank set Trim to %+v, want {1,3}", got)
+	}
+}
+
+func TestResultModeUndoClampsThePreviewPosition(t *testing.T) {
+	fn, _ := fakeRenderer("F", nil)
+	pl := pipeline.New(pipeline.Trim{Start: 1, End: 3})
+	m := step(t, New(testSession(pl), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = step(t, m, key("v"))
+	m = openMenu(t, m, pipeline.KindTrim)
+	m.modal.input.SetValue("1-30")
+	m = step(t, m, key("enter"))
+	for i := 0; i < 6; i++ {
+		m = step(t, m, key("L"))
+	}
+	if m.preview.time <= 3 {
+		t.Fatalf("setup: position = %vs, want past 3s", m.preview.time)
+	}
+
+	m = step(t, m, key("tab"))
+	m = step(t, m, key("u"))
+
+	if m.preview.time != 3 {
+		t.Errorf("position after undoing back to a 1-3 trim = %vs, want 3s", m.preview.time)
+	}
+}
+
 func TestPipelineChangeInResultModeRerenders(t *testing.T) {
 	pl := pipeline.New(pipeline.FrameRate{FPS: 30})
 	fn, reqs := fakeRenderer("F", nil)
