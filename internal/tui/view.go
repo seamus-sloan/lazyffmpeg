@@ -150,31 +150,35 @@ func pipelineWindow(stepCount, visible, cursor int) (start, end int) {
 func frameTop(width int, title string) string {
 	// 5: "╭─ " before the title, the space after it and the closing "╮".
 	title = ansi.Truncate(title, maxInt(width-5, 0), "…")
-	left := "╭─ " + title + " "
-	remaining := width - lipgloss.Width(left) - 1
-	if remaining < 0 {
-		remaining = 0
+	remaining := maxInt(width-5-lipgloss.Width(title), 0)
+	return frameBorderStyle.Render("╭─ ") + styleTitle(title) + " " +
+		frameBorderStyle.Render(strings.Repeat("─", remaining)+"╮")
+}
+
+// styleTitle colours a frame title of the form "lazyff · <name>": the
+// program name in the accent colour, the separator dimmed, the name bold.
+func styleTitle(title string) string {
+	if name, ok := strings.CutPrefix(title, "lazyff · "); ok {
+		return brandStyle.Render("lazyff") + sep + titleStyle.Render(name)
 	}
-	return left + strings.Repeat("─", remaining) + "╮"
+	return titleStyle.Render(title)
 }
 
 func frameBottom(width int) string {
-	return "╰" + strings.Repeat("─", maxInt(width-2, 0)) + "╯"
+	return frameBorderStyle.Render("╰" + strings.Repeat("─", maxInt(width-2, 0)) + "╯")
 }
 
 // boxTop/boxBottom draw a light-weight titled box (the preview box),
-// distinct from frameTop/frameBottom's rounded outer frame.
+// distinct from frameTop/frameBottom's rounded outer frame. title is
+// already styled by the caller.
 func boxTop(width int, title string) string {
-	left := "┌─ " + title + " "
-	remaining := width - lipgloss.Width(left) - 1
-	if remaining < 0 {
-		remaining = 0
-	}
-	return left + strings.Repeat("─", remaining) + "┐"
+	remaining := maxInt(width-5-lipgloss.Width(title), 0)
+	return boxBorderStyle.Render("┌─ ") + title + " " +
+		boxBorderStyle.Render(strings.Repeat("─", remaining)+"┐")
 }
 
 func boxBottom(width int) string {
-	return "└" + strings.Repeat("─", maxInt(width-2, 0)) + "┘"
+	return boxBorderStyle.Render("└" + strings.Repeat("─", maxInt(width-2, 0)) + "┘")
 }
 
 func (m Model) renderFrame() string {
@@ -213,7 +217,8 @@ func (m Model) renderFrame() string {
 func sideLine(width int, content string) string {
 	inner := width - 2
 	c := padOrTruncate(content, inner)
-	return "│" + c + "│"
+	bar := frameBorderStyle.Render("│")
+	return bar + c + bar
 }
 
 // oneLine collapses text drawn into a single row (an error or status
@@ -256,11 +261,7 @@ func (m Model) leftColumnLines() []string {
 
 	lines = append(lines, m.infoLine())
 	lines = append(lines, "")
-	heading := "PIPELINE"
-	if m.focus == focusPipeline {
-		heading = focusedHeadingStyle.Render(heading)
-	}
-	lines = append(lines, heading)
+	lines = append(lines, panelHeading("PIPELINE", m.focus == focusPipeline))
 	lines = append(lines, m.pipelineLines()...)
 
 	return lines
@@ -273,7 +274,17 @@ func (m Model) infoLine() string {
 	dims := fmt.Sprintf("%d×%d", info.Video.Width, info.Video.Height)
 	codec := codecLabel(info.Video.Codec)
 	size := units.FormatSize(info.SizeBytes)
-	return fmt.Sprintf("%s / %s  %s · %s · %s", pos, total, dims, codec, size)
+	return timeStyle.Render(pos) + dimStyle.Render(" / ") + timeStyle.Render(total) +
+		"  " + titleStyle.Render(dims) + sep + outputStyle.Render(codec) + sep + sizeStyle.Render(size)
+}
+
+// panelHeading renders a panel title: accented when that panel has focus,
+// dimmed otherwise.
+func panelHeading(text string, focused bool) string {
+	if focused {
+		return focusedHeadingStyle.Render(text)
+	}
+	return headingStyle.Render(text)
 }
 
 func codecLabel(codec string) string {
@@ -301,34 +312,41 @@ func (m Model) pipelineLines() []string {
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		s := steps[i]
-		prefix := "  "
-		if m.focus == focusPipeline && i == m.pipelineCursor {
-			prefix = "> "
-		}
+		on := m.focus == focusPipeline && i == m.pipelineCursor
 		label := s.Kind().Label()
 		if len(label) < stepLabelWidth {
 			label += strings.Repeat(" ", stepLabelWidth-len(label))
 		}
-		lines = append(lines, fmt.Sprintf("%s%d. %s%s", prefix, i+1, label, s.Summary()))
+		summary := s.Summary()
+		if on {
+			summary = cursorStyle.Render(summary)
+		}
+		lines = append(lines, cursorPrefix(on)+dimStyle.Render(fmt.Sprintf("%d.", i+1))+" "+
+			kindStyle(s.Kind()).Render(label)+summary)
 	}
 	return lines
 }
 
+// kindStyle colours a step by what it changes: filter steps (the picture
+// and the timeline) in one colour, output settings in another.
+func kindStyle(k pipeline.Kind) lipgloss.Style {
+	if k.IsFilter() {
+		return videoStyle
+	}
+	return outputStyle
+}
+
 func (m Model) menuLines() []string {
 	var lines []string
-	heading := "MENU"
-	if m.focus == focusMenu {
-		heading = focusedHeadingStyle.Render(heading)
-	}
-	lines = append(lines, heading)
+	lines = append(lines, panelHeading("MENU", m.focus == focusMenu))
 
 	idx := 0
-	addItem := func(label string) {
-		prefix := "  "
-		if m.focus == focusMenu && idx == m.menuCursor {
-			prefix = "> "
+	addItem := func(label string, style lipgloss.Style) {
+		on := m.focus == focusMenu && idx == m.menuCursor
+		if on {
+			style = cursorStyle
 		}
-		lines = append(lines, prefix+label)
+		lines = append(lines, cursorPrefix(on)+style.Render(label))
 		idx++
 	}
 
@@ -341,12 +359,12 @@ func (m Model) menuLines() []string {
 			if i > 0 {
 				lines = append(lines, "")
 			}
-			lines = append(lines, h)
+			lines = append(lines, kindStyle(k).Render(h))
 		}
-		addItem(menuItemLabel(k))
+		addItem(menuItemLabel(k), lipgloss.NewStyle())
 	}
 	lines = append(lines, "")
-	addItem("Run")
+	addItem("Run", successStyle)
 
 	return lines
 }
@@ -360,14 +378,20 @@ func (m Model) footerLines() ([]string, string) {
 	opts := pipeline.Options{Input: m.session.Input, Output: outputPath}
 
 	var raw string
+	colorLine := colorCommand
 	if m.notice != "" {
 		raw = oneLine(m.notice)
+		colorLine = func(s string) string { return promptStyle.Render(s) }
 	} else if argv, err := pipeline.Compile(m.session.Info, m.pipeline, opts); err != nil {
 		raw = oneLine(err.Error())
+		colorLine = func(s string) string { return errorStyle.Render(s) }
 	} else {
 		raw = pipeline.QuoteCommand(argv)
 	}
 	commandLines := m.footerCommandLines(raw)
+	for i, l := range commandLines {
+		commandLines[i] = colorLine(l)
+	}
 
 	sizeStr := "–"
 	durStr := "--:--"
@@ -375,8 +399,9 @@ func (m Model) footerLines() ([]string, string) {
 		sizeStr = units.FormatSize(est.Bytes)
 		durStr = units.FormatClock(est.Duration)
 	}
-	hints := "r run · tab focus · ? help · q quit"
-	line2 := fmt.Sprintf("~%s · %s → %s  %s", sizeStr, durStr, outputPath, hints)
+	hints := hintLine("r", "run", "tab", "focus", "?", "help", "q", "quit")
+	line2 := sizeStyle.Bold(true).Render("~"+sizeStr) + sep + timeStyle.Render(durStr) +
+		dimStyle.Render(" → ") + outputPath + "  " + hints
 
 	return commandLines, line2
 }
@@ -429,40 +454,45 @@ func wrapText(s string, width int) []string {
 
 func (m Model) helpText() string {
 	if m.mode == modePicker {
-		return strings.Join([]string{
-			"Keys",
-			"  j/k, ↑/↓        move the cursor",
-			"  enter           open the directory, or probe the file",
-			"  backspace,h,←   go to the parent directory",
-			"  /               filter (esc clears, enter accepts)",
-			"  q, ctrl+c       quit",
-			"  ?               toggle this help",
-			"",
-			"press any key to close",
-		}, "\n")
+		return helpTable(16,
+			"j/k, ↑/↓", "move the cursor",
+			"enter", "open the directory, or probe the file",
+			"backspace,h,←", "go to the parent directory",
+			"/", "filter (esc clears, enter accepts)",
+			"q, ctrl+c", "quit",
+			"?", "toggle this help",
+		)
 	}
-	return strings.Join([]string{
-		"Keys",
-		"  tab          switch focus between MENU and PIPELINE",
-		"  j/k, ↑/↓     move the cursor",
-		"  enter        open the selected step's modal",
-		"  e            edit the selected pipeline step",
-		"  x            remove the selected pipeline step",
-		"  J/K          move a filter step down/up",
-		"  u            undo the last pipeline change",
-		"  c            toggle the full command in the footer",
-		"  r            run",
-		"  l/h          seek the preview ±1s",
-		"  L/H          seek the preview ±5s",
-		"  v            toggle original/result preview",
-		"  space        play/pause the preview",
-		"  i/o          set the trim start/end at the preview position",
-		"  esc          cancel a modal, or answer no to a confirmation",
-		"  q, ctrl+c    quit",
-		"  ?            toggle this help",
-		"",
-		"press any key to close",
-	}, "\n")
+	return helpTable(13,
+		"tab", "switch focus between MENU and PIPELINE",
+		"j/k, ↑/↓", "move the cursor",
+		"enter", "open the selected step's modal",
+		"e", "edit the selected pipeline step",
+		"x", "remove the selected pipeline step",
+		"J/K", "move a filter step down/up",
+		"u", "undo the last pipeline change",
+		"c", "toggle the full command in the footer",
+		"r", "run",
+		"l/h", "seek the preview ±1s",
+		"L/H", "seek the preview ±5s",
+		"v", "toggle original/result preview",
+		"space", "play/pause the preview",
+		"i/o", "set the trim start/end at the preview position",
+		"esc", "cancel a modal, or answer no to a confirmation",
+		"q, ctrl+c", "quit",
+		"?", "toggle this help",
+	)
+}
+
+// helpTable lays out key/description pairs under a "Keys" heading, each
+// key padded to keyWidth columns and highlighted.
+func helpTable(keyWidth int, pairs ...string) string {
+	lines := []string{focusedHeadingStyle.Render("Keys")}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		key := pairs[i] + strings.Repeat(" ", maxInt(keyWidth-lipgloss.Width(pairs[i]), 0))
+		lines = append(lines, "  "+keyStyle.Render(key)+pairs[i+1])
+	}
+	return strings.Join(append(lines, "", dimStyle.Render("press any key to close")), "\n")
 }
 
 func (m Model) renderPickerFrame() string {
@@ -493,10 +523,10 @@ func (m Model) pickerBodyLines() []string {
 	if usable == 1 {
 		noun = "file"
 	}
-	header = append(header, fmt.Sprintf("%d usable %s", usable, noun))
+	header = append(header, videoStyle.Render(fmt.Sprint(usable))+dimStyle.Render(" usable "+noun))
 
 	if m.picker.filtering || m.picker.filter != "" {
-		header = append(header, "filter: "+m.picker.filter)
+		header = append(header, dimStyle.Render("filter: ")+promptStyle.Render(m.picker.filter))
 	}
 	header = append(header, "")
 
@@ -507,9 +537,9 @@ func (m Model) pickerBodyLines() []string {
 
 	hasParent := m.pickerHasParentRow()
 	if len(entries) == 0 {
-		lines := append(header, fmt.Sprintf("No video files in %s", m.picker.dir))
+		lines := append(header, dimStyle.Render(fmt.Sprintf("No video files in %s", m.picker.dir)))
 		if hasParent {
-			lines = append(lines, "backspace: go up a directory")
+			lines = append(lines, keyStyle.Render("backspace")+dimStyle.Render(": go up a directory"))
 		}
 		return lines
 	}
@@ -543,26 +573,38 @@ func (m Model) pickerRowLines(entries []picker.Entry, hasParent bool) []string {
 	var lines []string
 
 	row := 0
-	prefixFor := func() string {
-		prefix := "  "
-		if m.picker.cursor == row {
-			prefix = "> "
-		}
+	// next reports whether the row being built is the cursor row, and
+	// advances to the following one.
+	next := func() bool {
+		on := m.picker.cursor == row
 		row++
-		return prefix
+		return on
 	}
 
 	if hasParent {
-		lines = append(lines, prefixFor()+"..")
+		on := next()
+		name := dimStyle.Render("..")
+		if on {
+			name = cursorStyle.Render("..")
+		}
+		lines = append(lines, cursorPrefix(on)+name)
 	}
 	for _, e := range entries {
-		prefix := prefixFor()
+		on := next()
 		if e.IsDir {
-			lines = append(lines, fmt.Sprintf("%s%s/", prefix, e.Name))
+			style := dirStyle
+			if on {
+				style = cursorStyle
+			}
+			lines = append(lines, cursorPrefix(on)+style.Render(e.Name+"/"))
 		} else {
 			name := padOrTruncate(e.Name, nameWidth)
-			lines = append(lines, fmt.Sprintf("%s%s %10s  %s", prefix, name,
-				units.FormatSize(e.Size), e.ModTime.Format("2006-01-02")))
+			if on {
+				name = cursorStyle.Render(name)
+			}
+			lines = append(lines, cursorPrefix(on)+name+" "+
+				sizeStyle.Render(fmt.Sprintf("%10s", units.FormatSize(e.Size)))+"  "+
+				dimStyle.Render(e.ModTime.Format("2006-01-02")))
 		}
 	}
 	return lines
@@ -570,7 +612,8 @@ func (m Model) pickerRowLines(entries []picker.Entry, hasParent bool) []string {
 
 // modalBoxStyle borders and pads content shown as a centered overlay (the
 // step modal, the help screen).
-var modalBoxStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+var modalBoxStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).
+	BorderForeground(colorAccent).Padding(1, 2)
 
 // overlay centers content (already styled as a box by its caller, e.g.
 // modalBoxStyle) over base using a lipgloss compositor.

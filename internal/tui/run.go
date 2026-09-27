@@ -317,47 +317,52 @@ func (m Model) runBodyLines() []string {
 		if m.session.InPlace {
 			prompt = fmt.Sprintf("Replace original %s? (y/n)", rs.job.Output)
 		}
-		return []string{oneLine(prompt)}
+		return []string{promptStyle.Render(oneLine(prompt))}
 
 	case runRunning:
 		width := m.innerWidth() - 2
 		if width < 10 {
 			width = 10
 		}
-		bar := progress.New(progress.WithWidth(width))
+		bar := progress.New(progress.WithWidth(width), progress.WithColors(colorAccent, colorPink), progress.WithoutPercentage())
 		pct := rs.progress.Percent
 
 		lines := []string{
 			bar.ViewAs(pct / 100),
-			fmt.Sprintf("%.0f%%  elapsed %s  eta %s  speed %.1fx",
-				pct, rs.progress.Elapsed.Round(time.Second), rs.progress.ETA.Round(time.Second), rs.progress.Speed),
+			successStyle.Render(fmt.Sprintf("%.0f%%", pct)) +
+				dimStyle.Render("  elapsed ") + timeStyle.Render(rs.progress.Elapsed.Round(time.Second).String()) +
+				dimStyle.Render("  eta ") + timeStyle.Render(rs.progress.ETA.Round(time.Second).String()) +
+				dimStyle.Render("  speed ") + timeStyle.Render(fmt.Sprintf("%.1fx", rs.progress.Speed)),
 		}
 		if rs.pendingCancel {
-			lines = append(lines, "", "Cancel encoding? (y/n)")
+			lines = append(lines, "", promptStyle.Render("Cancel encoding? (y/n)"))
 		}
 		if rs.pendingQuit {
-			lines = append(lines, "", "Quit and cancel encoding? (y/n)")
+			lines = append(lines, "", promptStyle.Render("Quit and cancel encoding? (y/n)"))
 		}
 		if rs.quitAfterRun {
-			lines = append(lines, "", "canceling…")
+			lines = append(lines, "", promptStyle.Render("canceling…"))
 		}
 		return lines
 
 	case runDone:
 		if rs.canceled {
-			return []string{"Canceled", "", "press any key to continue"}
+			return []string{promptStyle.Render("Canceled"), "", continueHint}
 		}
-		return []string{
-			oneLine(fmt.Sprintf("Wrote %s", rs.result.Output)),
-			units.FormatSizeChange(rs.inputSize, rs.result.Size),
-			"",
-			"press any key to continue",
+		wrote := oneLine(fmt.Sprintf("Wrote %s", rs.result.Output))
+		if path, ok := strings.CutPrefix(wrote, "Wrote "); ok {
+			wrote = successStyle.Render("Wrote") + " " + path
 		}
+		change := sizeStyle.Render(units.FormatSizeChange(rs.inputSize, rs.result.Size))
+		if rs.result.Size < rs.inputSize {
+			change = successStyle.Render(units.FormatSizeChange(rs.inputSize, rs.result.Size))
+		}
+		return []string{wrote, change, "", continueHint}
 
 	case runError:
 		var exitErr *runner.ExitError
 		if !errors.As(rs.err, &exitErr) {
-			return []string{"Error: " + oneLine(rs.err.Error()), "", "press any key to continue"}
+			return []string{errorStyle.Render("Error: ") + oneLine(rs.err.Error()), "", continueHint}
 		}
 		// Show as much of the end of ffmpeg's stderr as fits between the
 		// heading and the two closing lines inside the frame's borders.
@@ -366,11 +371,17 @@ func (m Model) runBodyLines() []string {
 		if len(tail) > room {
 			tail = tail[len(tail)-room:]
 		}
-		lines := append([]string{"ffmpeg failed:"}, tail...)
-		return append(lines, "", "press any key to continue")
+		lines := []string{errorStyle.Render("ffmpeg failed:")}
+		for _, t := range tail {
+			lines = append(lines, dimStyle.Render(t))
+		}
+		return append(lines, "", continueHint)
 	}
 	return nil
 }
+
+// continueHint closes the done, canceled and error screens.
+var continueHint = dimStyle.Render("press any key to continue")
 
 func (m Model) renderRunFrame() string {
 	width := m.width

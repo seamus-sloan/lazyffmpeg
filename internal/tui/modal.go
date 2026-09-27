@@ -241,6 +241,12 @@ func (m Model) openModal(kind pipeline.Kind) Model {
 	ti := textinput.New()
 	ti.Placeholder = placeholderFor(kind)
 	ti.SetWidth(40)
+	styles := ti.Styles()
+	styles.Focused.Prompt = cursorStyle
+	styles.Blurred.Prompt = dimStyle
+	styles.Focused.Placeholder = dimStyle
+	styles.Blurred.Placeholder = dimStyle
+	ti.SetStyles(styles)
 
 	current, hasCurrent := m.pipeline.Find(kind)
 	if hasCurrent {
@@ -359,18 +365,20 @@ func (m Model) handleModalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) modalView() string {
 	ms := m.modal
 	var b strings.Builder
-	b.WriteString(ms.kind.Label())
+	b.WriteString(kindStyle(ms.kind).Render(ms.kind.Label()))
 	b.WriteString("\n\n")
 	for i, o := range ms.options {
-		prefix := "  "
-		if i == ms.cursor {
-			prefix = "> "
-		}
+		on := i == ms.cursor
+		label := o.label
 		if o.step == nil {
-			b.WriteString(prefix + "Custom…\n")
+			label = "Custom…"
+		}
+		if on {
+			label = cursorStyle.Render(label)
+		}
+		b.WriteString(cursorPrefix(on) + label + "\n")
+		if o.step == nil {
 			b.WriteString("    " + ms.input.View() + "\n")
-		} else {
-			b.WriteString(prefix + o.label + "\n")
 		}
 	}
 	if ms.err != "" {

@@ -311,28 +311,29 @@ func colorProfileString(p colorprofile.Profile) string {
 
 func (m Model) previewBoxLines() []string {
 	cols, rows := m.previewBoxSize()
-	label := "original"
+	label := videoStyle.Render("original")
 	if m.preview.resultMode {
-		label = "result"
+		label = successStyle.Render("result")
 	}
 
 	var content []string
 	switch {
 	case !m.rendererAvailable:
-		content = []string{"install chafa for preview"}
+		content = []string{dimStyle.Render("install chafa for preview")}
 	case m.preview.frameErr != "":
-		content = []string{oneLine(m.preview.frameErr)}
+		content = []string{errorStyle.Render(oneLine(m.preview.frameErr))}
 	case m.preview.frame != "":
 		content = strings.Split(m.preview.frame, "\n")
 	}
 
+	bar := boxBorderStyle.Render("│")
 	lines := []string{boxTop(cols+2, label)}
 	for i := 0; i < rows; i++ {
 		text := ""
 		if i < len(content) {
 			text = content[i]
 		}
-		lines = append(lines, "│"+padOrTruncate(text, cols)+"│")
+		lines = append(lines, bar+padOrTruncate(text, cols)+bar)
 	}
 	lines = append(lines, boxBottom(cols+2))
 	return lines
