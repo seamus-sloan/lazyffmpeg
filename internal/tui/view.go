@@ -336,6 +336,7 @@ func (m Model) helpText() string {
 		"  v            toggle original/result preview",
 		"  space        play/pause the preview",
 		"  i/o          set the trim start/end at the preview position",
+		"  esc          cancel a modal, or answer no to a confirmation",
 		"  q, ctrl+c    quit",
 		"  ?            toggle this help",
 		"",
