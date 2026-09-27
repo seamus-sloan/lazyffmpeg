@@ -191,6 +191,55 @@ func (m Model) handlePreviewTick(msg previewTickMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// numFilterSteps counts steps's leading run of filter steps (Steps()
+// always lists filters before outputs).
+func numFilterSteps(steps []pipeline.Step) int {
+	n := 0
+	for _, s := range steps {
+		if !s.Kind().IsFilter() {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+// setTrimBound sets the Trim step's Start (isStart) or End at the current
+// preview position, keeping the other bound, and upserting a new Trim
+// step (appended after the pipeline's other filter steps) when there is
+// none yet. Because a Trim step placed after a Speed step works in
+// sped-up time, the input-time preview position is mapped through
+// whatever filter steps precede it.
+func (m Model) setTrimBound(isStart bool) (Model, tea.Cmd) {
+	steps := m.pipeline.Steps()
+	before := numFilterSteps(steps)
+	for i, s := range steps {
+		if s.Kind() == pipeline.KindTrim {
+			before = i
+			break
+		}
+	}
+
+	t := pipeline.MapTime(m.pipeline, before, m.preview.time)
+
+	var trim pipeline.Trim
+	if cur, ok := m.pipeline.Find(pipeline.KindTrim); ok {
+		trim = cur.(pipeline.Trim)
+	}
+	if isStart {
+		trim.Start = t
+	} else {
+		trim.End = t
+	}
+	if trim.Validate() != nil {
+		return m, nil
+	}
+
+	m = m.pushUndo()
+	m.pipeline = m.pipeline.Upsert(trim)
+	return m.maybeRerenderResult()
+}
+
 // maybeRerenderResult requests a fresh render after a pipeline edit, but
 // only when the preview is showing the result (the original frame is
 // unaffected by pipeline changes).

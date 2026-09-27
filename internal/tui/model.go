@@ -247,6 +247,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.togglePreviewMode()
 	case "space":
 		return m.togglePlay()
+	case "i":
+		return m.setTrimBound(true)
+	case "o":
+		return m.setTrimBound(false)
 	}
 
 	if m.focus == focusMenu {

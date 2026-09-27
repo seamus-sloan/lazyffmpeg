@@ -399,3 +399,60 @@ func TestColorProfileMapping(t *testing.T) {
 		}
 	}
 }
+
+func TestSetTrimBoundsAtPreviewPosition(t *testing.T) {
+	m := New(testSession(pipeline.New()))
+	m = resized(m, 100, 30)
+	m.preview.time = 5
+
+	mm, _ := m.Update(key("i"))
+	m = mm.(Model)
+	tr, ok := m.pipeline.Find(pipeline.KindTrim)
+	if !ok || tr.(pipeline.Trim).Start != 5 {
+		t.Fatalf("Trim after i = %v, want Start 5", tr)
+	}
+
+	m.preview.time = 20
+	mm, _ = m.Update(key("o"))
+	m = mm.(Model)
+	tr, ok = m.pipeline.Find(pipeline.KindTrim)
+	trim := tr.(pipeline.Trim)
+	if !ok || trim.Start != 5 || trim.End != 20 {
+		t.Fatalf("Trim after o = %v, want Start 5 End 20", trim)
+	}
+}
+
+func TestSetTrimBoundMapsThroughPrecedingSpeed(t *testing.T) {
+	pl := pipeline.New(pipeline.Speed{Factor: 2})
+	m := New(testSession(pl))
+	m = resized(m, 100, 30)
+	m.preview.time = 10 // input-time position
+
+	mm, _ := m.Update(key("i"))
+	m = mm.(Model)
+	tr, ok := m.pipeline.Find(pipeline.KindTrim)
+	// MapTime maps the input-time position through the preceding Speed(2)
+	// step (Trim is appended after it): 10 input-seconds -> 5 chain-local.
+	if !ok || tr.(pipeline.Trim).Start != 5 {
+		t.Fatalf("Trim = %v, want Start 5 (10 input-seconds through Speed 2x)", tr)
+	}
+}
+
+func TestSetTrimBoundIsUndoable(t *testing.T) {
+	m := New(testSession(pipeline.New()))
+	m = resized(m, 100, 30)
+	m.preview.time = 5
+
+	mm, _ := m.Update(key("i"))
+	m = mm.(Model)
+	if _, ok := m.pipeline.Find(pipeline.KindTrim); !ok {
+		t.Fatal("i did not add a Trim step")
+	}
+
+	m.focus = focusPipeline
+	mm, _ = m.Update(key("u"))
+	m = mm.(Model)
+	if _, ok := m.pipeline.Find(pipeline.KindTrim); ok {
+		t.Error("u did not undo the i-driven Trim change")
+	}
+}
