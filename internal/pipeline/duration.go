@@ -85,3 +85,34 @@ func MapTime(p Pipeline, before int, t float64) float64 {
 	}
 	return t
 }
+
+// PlayableRange returns, in input-timeline seconds, the portion of the
+// input that the pipeline's Speed and Trim steps play: the same timeline
+// walk OutputDuration uses, translated back onto the input's own time
+// axis. An invalid pipeline (see Validate) returns the full input range.
+func PlayableRange(info probe.Info, p Pipeline) (start, end float64) {
+	st, err := walkTimeline(p.Steps(), info.Duration)
+	if err != nil {
+		return 0, info.Duration
+	}
+	return st.offset, st.offset + st.dur*st.scale
+}
+
+// PlaybackRate returns the pipeline's Speed factor, or 1 when there is
+// none.
+func PlaybackRate(p Pipeline) float64 {
+	if s, ok := p.Find(KindSpeed); ok {
+		return s.(Speed).Factor
+	}
+	return 1
+}
+
+// SpatialVideoFilter returns the pipeline's Resolution step's video
+// filter (fps and other non-spatial filters are irrelevant to a still
+// preview frame), or "" when there is none.
+func SpatialVideoFilter(p Pipeline) string {
+	if r, ok := p.Find(KindResolution); ok {
+		return r.(Resolution).VideoFilter()
+	}
+	return ""
+}
