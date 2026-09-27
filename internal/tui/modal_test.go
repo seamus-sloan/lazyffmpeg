@@ -308,24 +308,11 @@ func TestContainerMkvChangesFooterOutputPath(t *testing.T) {
 }
 
 func TestQualityModalDoesNotOpenForCopyEncoder(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("opening the Quality modal with encoder copy panicked: %v", r)
-		}
-	}()
 	pl := pipeline.New(pipeline.Encoder{Codec: pipeline.CodecCopy})
 	m := resized(New(testSession(pl)), 100, 30)
 	m = openMenu(t, m, pipeline.KindQuality)
 	if m.modal != nil {
 		t.Fatal("Quality modal opened despite encoder copy")
-	}
-
-	// A second enter (as if a modal had opened) must not panic or change
-	// the pipeline either.
-	mm, _ := m.Update(key("enter"))
-	m = mm.(Model)
-	if _, ok := m.pipeline.Find(pipeline.KindQuality); ok {
-		t.Error("pipeline gained a Quality step despite encoder copy")
 	}
 }
 

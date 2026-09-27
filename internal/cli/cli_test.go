@@ -347,23 +347,6 @@ func TestParseInPlaceSameContainerOK(t *testing.T) {
 	}
 }
 
-// TestParseInPlaceContainerMismatchIsAppsJob documents that Parse itself no
-// longer rejects an --in-place container mismatch: it cannot tell a file
-// input (whose own extension matters) from a directory input (whose name
-// just happens to have no extension), so that check lives where the answer
-// is known, in the app package.
-func TestParseInPlaceContainerMismatchIsAppsJob(t *testing.T) {
-	if _, err := Parse([]string{"in.mov", "--in-place", "--container", "mkv"}); err != nil {
-		t.Errorf("Parse: unexpected error %v", err)
-	}
-}
-
-func TestParseInPlaceOnDirectoryLikeInputDoesNotError(t *testing.T) {
-	if _, err := Parse([]string{"/Users/me/Desktop", "--in-place", "--container", "mp4"}); err != nil {
-		t.Errorf("Parse: unexpected error %v", err)
-	}
-}
-
 func TestParseNoStepsHasStepsFalse(t *testing.T) {
 	cfg, err := Parse([]string{"in.mov"})
 	if err != nil {

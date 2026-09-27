@@ -8,7 +8,6 @@ const menuWidth = 32
 
 var (
 	focusedHeadingStyle = lipgloss.NewStyle().Bold(true)
-	cursorStyle         = lipgloss.NewStyle().Bold(true)
 	dimStyle            = lipgloss.NewStyle().Faint(true)
 	errorStyle          = lipgloss.NewStyle().Bold(true)
 )

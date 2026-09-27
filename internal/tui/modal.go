@@ -32,9 +32,9 @@ func isCustomOption(opts []modalOption, i int) bool {
 	return i >= 0 && i < len(opts) && opts[i].step == nil
 }
 
-// presetsFor returns kind's preset options against p (Quality's presets
-// depend on codec, the pipeline's effective encoder).
-func presetsFor(kind pipeline.Kind, p pipeline.Pipeline, codec pipeline.Codec) []modalOption {
+// presetsFor returns kind's preset options (Quality's presets depend on
+// codec, the pipeline's effective encoder).
+func presetsFor(kind pipeline.Kind, codec pipeline.Codec) []modalOption {
 	switch kind {
 	case pipeline.KindResolution:
 		return []modalOption{
@@ -77,9 +77,6 @@ func presetsFor(kind pipeline.Kind, p pipeline.Pipeline, codec pipeline.Codec) [
 			{"copy", pipeline.Encoder{Codec: pipeline.CodecCopy}},
 		}
 	case pipeline.KindQuality:
-		if codec == pipeline.CodecCopy {
-			return nil
-		}
 		d := pipeline.DefaultCRF(codec)
 		return []modalOption{
 			{fmt.Sprintf("Default (CRF %d)", d), pipeline.Quality{CRF: d}},
@@ -237,7 +234,7 @@ func (m Model) openModal(kind pipeline.Kind) Model {
 		return m
 	}
 
-	opts := presetsFor(kind, m.pipeline, codec)
+	opts := presetsFor(kind, codec)
 	ms := modalState{kind: kind, options: opts}
 
 	ti := textinput.New()
@@ -283,7 +280,7 @@ func (m Model) openModalForCurrentStep() Model {
 }
 
 func (m Model) moveModalCursor(delta int) Model {
-	if m.modal == nil || len(m.modal.options) == 0 {
+	if m.modal == nil {
 		return m
 	}
 	ms := *m.modal
@@ -299,10 +296,6 @@ func (m Model) moveModalCursor(delta int) Model {
 
 func (m Model) confirmModal() Model {
 	ms := *m.modal
-	if len(ms.options) == 0 {
-		m.modal = nil
-		return m
-	}
 	var step pipeline.Step
 	if isCustomOption(ms.options, ms.cursor) {
 		parsed, err := parseCustom(ms.kind, ms.input.Value())
