@@ -178,6 +178,8 @@ func TestIntegrationOutputDimensionsMatchRealEncode(t *testing.T) {
 	}{
 		{"fit", 642, 480, pipeline.Resolution{Width: 320, Height: 240}},
 		{"single side", 642, 480, pipeline.Resolution{Width: 320}},
+		{"odd single width", 320, 240, pipeline.Resolution{Width: 161}},
+		{"odd single height", 320, 240, pipeline.Resolution{Height: 121}},
 		{"percent", 640, 480, pipeline.Resolution{Percent: 50}},
 	}
 	for _, c := range cases {

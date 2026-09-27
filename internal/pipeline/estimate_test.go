@@ -155,6 +155,23 @@ func TestOutputDimensionsWidthOnly(t *testing.T) {
 	}
 }
 
+func TestOutputDimensionsOddSingleSideIsEven(t *testing.T) {
+	cases := []struct {
+		res          Resolution
+		wantW, wantH int
+	}{
+		{Resolution{Width: 161}, 160, 120},
+		{Resolution{Height: 121}, 160, 120},
+	}
+	for _, c := range cases {
+		info := infoForEstimate(320, 240, 30, 10, 0)
+		w, h := OutputDimensions(info, New(c.res))
+		if w != c.wantW || h != c.wantH {
+			t.Errorf("OutputDimensions(%+v on 320x240) = %dx%d, want %dx%d", c.res, w, h, c.wantW, c.wantH)
+		}
+	}
+}
+
 func TestOutputDimensionsPercent(t *testing.T) {
 	info := infoForEstimate(3652, 2560, 60, 33, 0)
 	p := New(Resolution{Percent: 50})

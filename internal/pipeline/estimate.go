@@ -94,9 +94,9 @@ func bppFor(codec Codec) float64 {
 }
 
 // OutputDimensions returns the compiled output's pixel dimensions: the
-// fitted (or exact/stretched) box for a Resolution step, the aspect-scaled
-// even value for a single explicit side, or the input's own size when
-// there is no Resolution step.
+// fitted (or exact/stretched) box for a Resolution step, a single explicit
+// side rounded down to even with the other side aspect-scaled to even, or
+// the input's own size when there is no Resolution step.
 func OutputDimensions(info probe.Info, p Pipeline) (w, h int) {
 	iw, ih := info.Video.Width, info.Video.Height
 	r, ok := p.Find(KindResolution)
@@ -115,9 +115,11 @@ func OutputDimensions(info probe.Info, p Pipeline) (w, h int) {
 		scale := math.Min(float64(res.Width)/float64(iw), float64(res.Height)/float64(ih))
 		return evenRound(float64(iw) * scale), evenRound(float64(ih) * scale)
 	case res.Width > 0:
-		return res.Width, evenRound(float64(ih) * float64(res.Width) / float64(iw))
+		w := evenDown(res.Width)
+		return w, evenRound(float64(ih) * float64(w) / float64(iw))
 	case res.Height > 0:
-		return evenRound(float64(iw) * float64(res.Height) / float64(ih)), res.Height
+		h := evenDown(res.Height)
+		return evenRound(float64(iw) * float64(h) / float64(ih)), h
 	}
 	return iw, ih
 }

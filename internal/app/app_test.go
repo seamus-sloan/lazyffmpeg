@@ -172,6 +172,25 @@ func TestMainHeadlessSuccess(t *testing.T) {
 	}
 }
 
+func TestMainHeadlessOddWidthEncodesEvenWidth(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--width", "161"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0, stderr=%s", code, errOut.String())
+	}
+	out := filepath.Join(filepath.Dir(in), "clip (edited).mp4")
+	outInfo, err := probe.Run(context.Background(), out)
+	if err != nil {
+		t.Fatalf("probe.Run(out): %v", err)
+	}
+	if outInfo.Video.Width != 160 || outInfo.Video.Height != 120 {
+		t.Errorf("output dims = %dx%d, want 160x120", outInfo.Video.Width, outInfo.Video.Height)
+	}
+}
+
 func TestMainOutputExistsNoForce(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})

@@ -146,15 +146,18 @@ func (r Resolution) VideoFilter() string {
 		}
 		return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:force_divisible_by=2", r.Width, r.Height)
 	case r.Width > 0:
-		return fmt.Sprintf("scale=%d:-2", r.Width)
+		return fmt.Sprintf("scale=%d:-2", evenDown(r.Width))
 	case r.Height > 0:
-		return fmt.Sprintf("scale=-2:%d", r.Height)
+		return fmt.Sprintf("scale=-2:%d", evenDown(r.Height))
 	}
 	return ""
 }
 
 func (Resolution) AudioFilter() string { return "" }
 
+// evenDown rounds n down to an even number: yuv420p encoders such as
+// libx264 reject odd frame dimensions, and ffmpeg's -2 already keeps the
+// other side even.
 func evenDown(n int) int {
 	return n - n%2
 }

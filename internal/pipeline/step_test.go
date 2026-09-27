@@ -75,6 +75,26 @@ func TestResolutionValidate(t *testing.T) {
 	}
 }
 
+func TestResolutionVideoFilterOddSingleSideRoundsDownToEven(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"853x", "scale=852:-2"},
+		{"x481", "scale=-2:480"},
+		{"161x", "scale=160:-2"},
+	}
+	for _, c := range cases {
+		r, err := ParseResolution(c.in)
+		if err != nil {
+			t.Fatalf("ParseResolution(%q): %v", c.in, err)
+		}
+		if got := r.VideoFilter(); got != c.want {
+			t.Errorf("VideoFilter(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestResolutionVideoFilter(t *testing.T) {
 	cases := []struct {
 		r    Resolution
