@@ -558,8 +558,9 @@ func (m Model) pickerBodyLines() []string {
 // to, so the size and date columns that follow line up regardless of how
 // long any one entry's name is.
 func (m Model) pickerNameWidth() int {
-	// 1 (space) + 10 (size) + 2 (spaces) + 10 (date) trail the name.
-	w := m.innerWidth() - 1 - 10 - 2 - 10
+	// 2 (cursor prefix) lead the name; 1 (space) + 10 (size) + 2 (spaces)
+	// + 10 (date) trail it.
+	w := m.innerWidth() - 2 - 1 - 10 - 2 - 10
 	if w < 10 {
 		w = 10
 	}

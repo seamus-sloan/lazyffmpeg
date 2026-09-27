@@ -186,6 +186,20 @@ func runeIndex(s, substr string) int {
 	return len([]rune(s[:byteIdx]))
 }
 
+func TestPickerRowShowsTheWholeDate(t *testing.T) {
+	entries := []picker.Entry{{
+		Name:    strings.Repeat("long name ", 12) + ".mp4",
+		Path:    "/dir/long.mp4",
+		Size:    12_000_000,
+		ModTime: time.Date(2026, 9, 26, 22, 19, 0, 0, time.UTC),
+	}}
+	m := resized(New(pickerSession()), 100, 30)
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: entries})
+	if out := viewText(mm.(Model)); !strings.Contains(out, "2026-09-26") {
+		t.Fatalf("picker row cut the modified date short:\n%s", out)
+	}
+}
+
 func TestPickerColumnsAlignRegardlessOfNameLength(t *testing.T) {
 	entries := []picker.Entry{
 		{Name: "short.mp4", Path: "/dir/short.mp4", Size: 100, ModTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
