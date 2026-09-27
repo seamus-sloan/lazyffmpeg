@@ -410,6 +410,55 @@ func TestResizeRequestsFreshRender(t *testing.T) {
 	}
 }
 
+func TestPreviewRerendersWhenAnAddedStepShrinksTheBox(t *testing.T) {
+	fn, reqs := fakeRenderer("F", nil)
+	pl := pipeline.New(pipeline.Speed{Factor: 2}, pipeline.FrameRate{FPS: 30})
+	m := step(t, New(testSession(pl), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+	_, rowsBefore := m.previewBoxSize()
+
+	m = openMenu(t, m, pipeline.KindResolution)
+	m = step(t, m, key("enter"))
+
+	_, rows := m.previewBoxSize()
+	if rows >= rowsBefore {
+		t.Fatalf("adding a third step did not shrink the preview box (%d -> %d rows)", rowsBefore, rows)
+	}
+	if last := (*reqs)[len(*reqs)-1]; last.Rows != rows {
+		t.Errorf("preview box is %d rows but the latest render was for %d rows", rows, last.Rows)
+	}
+}
+
+func TestPreviewRerendersWhenTheExpandedCommandShrinksTheBox(t *testing.T) {
+	fn, reqs := fakeRenderer("F", nil)
+	long := strings.Repeat("y", 300)
+	pl := pipeline.New(pipeline.RawArgs{Text: long, Args: []string{long}})
+	m := step(t, New(testSession(pl), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+	_, rowsBefore := m.previewBoxSize()
+
+	m = step(t, m, key("c"))
+
+	_, rows := m.previewBoxSize()
+	if rows >= rowsBefore {
+		t.Fatalf("expanding the command did not shrink the preview box (%d -> %d rows)", rowsBefore, rows)
+	}
+	if last := (*reqs)[len(*reqs)-1]; last.Rows != rows {
+		t.Errorf("preview box is %d rows but the latest render was for %d rows", rows, last.Rows)
+	}
+}
+
+func TestPreviewDoesNotRerenderWhenTheBoxSizeIsUnchanged(t *testing.T) {
+	fn, reqs := fakeRenderer("F", nil)
+	m := step(t, New(testSession(pipeline.New()), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+	before := len(*reqs)
+
+	m = step(t, m, key("tab"))
+	m = step(t, m, key("j"))
+
+	if len(*reqs) != before {
+		t.Errorf("keys that leave the preview box alone issued %d renders", len(*reqs)-before)
+	}
+}
+
 // TestResultModeRerenderClampsPreviewTimeIntoNewRange covers a pipeline
 // edit in result mode that shrinks the playable range out from under the
 // preview's current position: the follow-up render must land inside the

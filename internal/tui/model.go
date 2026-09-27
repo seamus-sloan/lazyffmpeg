@@ -155,6 +155,12 @@ func (m Model) Pipeline() pipeline.Pipeline {
 
 // Update handles one message and returns the next model and command.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	nm, renderCmd := next.(Model).rerenderIfBoxResized()
+	return nm, tea.Batch(cmd, renderCmd)
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

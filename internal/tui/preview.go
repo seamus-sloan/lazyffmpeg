@@ -40,6 +40,10 @@ type previewState struct {
 	nextSeq    int // monotonically increasing request counter
 	pendingSeq int // seq of the outstanding render; 0 = none in flight
 	dirty      bool
+
+	// cols, rows is the preview box size the latest render request was
+	// made for (see rerenderIfBoxResized).
+	cols, rows int
 }
 
 // previewFrameMsg carries one render's outcome, tagged with the request's
@@ -120,7 +124,27 @@ func (m Model) requestRender() (Model, tea.Cmd) {
 	seq := m.preview.nextSeq
 	m.preview.pendingSeq = seq
 	m.preview.dirty = false
-	return m, m.renderCmd(seq, m.previewRequest())
+	req := m.previewRequest()
+	m.preview.cols, m.preview.rows = req.Cols, req.Rows
+	return m, m.renderCmd(seq, req)
+}
+
+// rerenderIfBoxResized requests a fresh render whenever the preview box's
+// size no longer matches the size the latest render was requested for.
+// The box grows and shrinks with the terminal, the pipeline's length and
+// the footer's expanded command, so this runs after every Update rather
+// than at each place that can change one of those: a frame is never left
+// on screen cropped (or padded) to a size it was not rendered for without
+// a render for the new size on its way.
+func (m Model) rerenderIfBoxResized() (Model, tea.Cmd) {
+	if m.mode != modeMain || m.run.phase != runNone || m.width == 0 || m.preview.dirty {
+		return m, nil
+	}
+	cols, rows := m.previewBoxSize()
+	if cols == m.preview.cols && rows == m.preview.rows {
+		return m, nil
+	}
+	return m.requestRender()
 }
 
 func (m Model) renderCmd(seq int, req preview.Request) tea.Cmd {
