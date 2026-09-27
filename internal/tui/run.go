@@ -158,13 +158,11 @@ func (m Model) startRun(job runner.Job) (Model, tea.Cmd) {
 
 	fn := m.runFn
 	wg := m.runWG
+	programCtx := m.ctx
 	if wg != nil {
 		wg.Add(1)
 	}
 	go func() {
-		if wg != nil {
-			defer wg.Done()
-		}
 		onProgress := func(p runner.Progress) {
 			select {
 			case ch <- runProgressMsg(p):
@@ -172,7 +170,17 @@ func (m Model) startRun(job runner.Job) (Model, tea.Cmd) {
 			}
 		}
 		result, err := fn(ctx, job, onProgress)
-		ch <- runDoneMsg{result: result, err: err}
+		// fn has returned with its cleanup (e.g. removing a canceled run's
+		// temp file) done, which is all Run waits for: it must not also
+		// wait on the outcome being read, since after the program exits
+		// nothing reads it.
+		if wg != nil {
+			wg.Done()
+		}
+		select {
+		case ch <- runDoneMsg{result: result, err: err}:
+		case <-programCtx.Done(): // the program is exiting; nobody will read it
+		}
 	}()
 
 	return m, waitForRunMsg(ch)

@@ -744,6 +744,43 @@ func TestStartRunRegistersWithRunWaitGroup(t *testing.T) {
 	}
 }
 
+func TestWaitForRunsReturnsOnceAnUnreadRunReturns(t *testing.T) {
+	var wg sync.WaitGroup
+	returned := make(chan struct{})
+	fake := func(ctx context.Context, job runner.Job, on func(runner.Progress)) (runner.Result, error) {
+		defer close(returned)
+		for ctx.Err() == nil {
+			on(runner.Progress{Percent: 1})
+		}
+		return runner.Result{}, runner.ErrCanceled
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: filepath.Join(dir, "out.mp4")}
+	m := New(s, WithRunner(fake), withRunWaitGroup(&wg))
+	m.ctx = ctx
+	m = resized(m, 100, 30)
+
+	// Start a run, then exit the way a signal does, without anything ever
+	// reading the run's messages again: its progress stream backs up, and
+	// the program's context is canceled.
+	m.Update(key("r"))
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		t.Fatal("the runner did not return after its context was canceled")
+	}
+
+	start := time.Now()
+	waitForRuns(&wg, 2*time.Second)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("waitForRuns took %v after the runner had returned, want it to return promptly", elapsed)
+	}
+}
+
 func TestWaitForRunsBlocksUntilWaitGroupDone(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
