@@ -367,8 +367,9 @@ func (m Model) renderRunFrame() string {
 
 	var lines []string
 	lines = append(lines, top)
+	inner := m.innerWidth()
 	for _, l := range m.runBodyLines() {
-		lines = append(lines, sideLineFlex(width, l))
+		lines = append(lines, sideLine(width, padOrTruncate(l, inner)))
 	}
 	lines = append(lines, bottom)
 	return strings.Join(lines, "\n")

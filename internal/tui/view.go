@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/picker"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
@@ -35,9 +36,9 @@ func (m Model) View() tea.View {
 		body = m.renderFrame()
 	}
 	if m.modal != nil {
-		body = m.overlayModal(body)
+		body = overlay(body, modalBoxStyle.Render(m.modalView()))
 	} else if m.showHelp {
-		body = m.overlayHelp(body)
+		body = overlay(body, modalBoxStyle.Render(m.helpText()))
 	}
 	v.Content = body
 	return v
@@ -196,34 +197,14 @@ func sideLine(width int, content string) string {
 	return "│" + c + "│"
 }
 
-// sideLineFlex is sideLine, except a line wider than the frame's inner
-// width is left un-truncated (dropping the closing border) rather than
-// silently cutting off critical text such as a confirmation prompt's path.
-func sideLineFlex(width int, content string) string {
-	inner := width - 2
-	if lipgloss.Width(content) > inner {
-		return "│" + content
-	}
-	return sideLine(width, content)
-}
-
+// padOrTruncate pads s with trailing spaces to width w, or truncates it
+// (ANSI- and wide-character-aware, with a trailing "…") when it is wider.
 func padOrTruncate(s string, w int) string {
 	cur := lipgloss.Width(s)
 	if cur > w {
-		return truncateToWidth(s, w)
+		return ansi.Truncate(s, w, "…")
 	}
 	return s + strings.Repeat(" ", w-cur)
-}
-
-func truncateToWidth(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	r := []rune(s)
-	if len(r) <= w {
-		return s
-	}
-	return string(r[:w])
 }
 
 func maxInt(a, b int) int {
@@ -376,10 +357,7 @@ func (m Model) footerLineCount() int {
 func (m Model) footerCommandLines(raw string) []string {
 	avail := m.innerWidth()
 	if !m.showFullCommand {
-		if lipgloss.Width(raw) > avail {
-			return []string{truncateToWidth(raw, maxInt(avail-1, 0)) + "…"}
-		}
-		return []string{raw}
+		return []string{padOrTruncate(raw, avail)}
 	}
 	return wrapText(raw, avail)
 }
@@ -544,20 +522,21 @@ func (m Model) pickerRowLines(entries []picker.Entry, hasParent bool) []string {
 	return lines
 }
 
-func (m Model) overlayHelp(base string) string {
-	modal := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(1, 2).
-		Render(m.helpText())
+// modalBoxStyle borders and pads content shown as a centered overlay (the
+// step modal, the help screen).
+var modalBoxStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
 
+// overlay centers content (already styled as a box by its caller, e.g.
+// modalBoxStyle) over base using a lipgloss compositor.
+func overlay(base, content string) string {
 	baseW, baseH := lipgloss.Width(base), lipgloss.Height(base)
-	mw, mh := lipgloss.Width(modal), lipgloss.Height(modal)
-	x := maxInt((baseW-mw)/2, 0)
-	y := maxInt((baseH-mh)/2, 0)
+	cw, ch := lipgloss.Width(content), lipgloss.Height(content)
+	x := maxInt((baseW-cw)/2, 0)
+	y := maxInt((baseH-ch)/2, 0)
 
 	c := lipgloss.NewCompositor(
 		lipgloss.NewLayer(base),
-		lipgloss.NewLayer(modal).X(x).Y(y).Z(1),
+		lipgloss.NewLayer(content).X(x).Y(y).Z(1),
 	)
 	return c.Render()
 }

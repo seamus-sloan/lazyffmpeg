@@ -7,7 +7,6 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/units"
@@ -384,22 +383,4 @@ func (m Model) modalView() string {
 		b.WriteString("\n" + errorStyle.Render(ms.err) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
-}
-
-func (m Model) overlayModal(base string) string {
-	modal := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(1, 2).
-		Render(m.modalView())
-
-	baseW, baseH := lipgloss.Width(base), lipgloss.Height(base)
-	mw, mh := lipgloss.Width(modal), lipgloss.Height(modal)
-	x := maxInt((baseW-mw)/2, 0)
-	y := maxInt((baseH-mh)/2, 0)
-
-	c := lipgloss.NewCompositor(
-		lipgloss.NewLayer(base),
-		lipgloss.NewLayer(modal).X(x).Y(y).Z(1),
-	)
-	return c.Render()
 }

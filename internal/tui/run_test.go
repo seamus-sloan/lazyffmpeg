@@ -207,7 +207,7 @@ func TestOverwriteConfirmPrompt(t *testing.T) {
 	}
 	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: outputPath}
 	m := New(s, WithRunner(fake))
-	m = resized(m, 100, 30)
+	m = resized(m, 200, 30)
 
 	mm, cmd := m.Update(key("r"))
 	m = mm.(Model)
@@ -258,7 +258,7 @@ func TestInPlaceConfirmPromptWording(t *testing.T) {
 	}
 	s := app.Session{Input: in, Info: testInfo(), InPlace: true}
 	m := New(s, WithRunner(fake))
-	m = resized(m, 100, 30)
+	m = resized(m, 200, 30)
 
 	mm, _ := m.Update(key("r"))
 	m = mm.(Model)
@@ -360,6 +360,30 @@ func TestSuccessfulInPlaceRunReprobesInputAndClearsUndo(t *testing.T) {
 	}
 }
 
+func TestRunFrameTruncatesLongLinesToTerminalWidth(t *testing.T) {
+	dir := t.TempDir()
+	longOutput := filepath.Join(dir, strings.Repeat("x", 300)+".mp4")
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: longOutput}
+	fake := func(ctx context.Context, job runner.Job, onProgress func(runner.Progress)) (runner.Result, error) {
+		return runner.Result{Output: job.Output, Size: 200_000_000}, nil
+	}
+	m := New(s, WithRunner(fake))
+	m = resized(m, 100, 30)
+
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	msg := cmd()
+	mm, _ = m.Update(msg)
+	m = mm.(Model)
+
+	out := viewText(m)
+	for _, l := range strings.Split(out, "\n") {
+		if w := len([]rune(l)); w > 100 {
+			t.Errorf("line is %d cells wide, want <= 100 (terminal width): %q", w, l)
+		}
+	}
+}
+
 func TestRunCompletionShowsResultAnyKeyReturns(t *testing.T) {
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "out.mp4")
@@ -368,7 +392,7 @@ func TestRunCompletionShowsResultAnyKeyReturns(t *testing.T) {
 		return runner.Result{Output: job.Output, Size: 200_000_000}, nil
 	}
 	m := New(s, WithRunner(fake))
-	m = resized(m, 100, 30)
+	m = resized(m, 200, 30)
 	wantLen := m.pipeline.Len()
 
 	mm, cmd := m.Update(key("r"))

@@ -175,6 +175,17 @@ func TestPickerViewFitsHeightWithManyEntries(t *testing.T) {
 	}
 }
 
+// runeIndex is strings.Index measured in runes (display columns) rather
+// than bytes, so a multi-byte character (e.g. the truncation ellipsis)
+// earlier in the line does not throw off the reported position.
+func runeIndex(s, substr string) int {
+	byteIdx := strings.Index(s, substr)
+	if byteIdx < 0 {
+		return -1
+	}
+	return len([]rune(s[:byteIdx]))
+}
+
 func TestPickerColumnsAlignRegardlessOfNameLength(t *testing.T) {
 	entries := []picker.Entry{
 		{Name: "short.mp4", Path: "/dir/short.mp4", Size: 100, ModTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
@@ -188,11 +199,11 @@ func TestPickerColumnsAlignRegardlessOfNameLength(t *testing.T) {
 	out := viewText(m)
 	col1, col2 := -1, -1
 	for _, l := range strings.Split(out, "\n") {
-		if strings.Contains(l, "100 B") {
-			col1 = strings.Index(l, "100 B")
+		if i := runeIndex(l, "100 B"); i >= 0 {
+			col1 = i
 		}
-		if strings.Contains(l, "200 B") {
-			col2 = strings.Index(l, "200 B")
+		if i := runeIndex(l, "200 B"); i >= 0 {
+			col2 = i
 		}
 	}
 	if col1 == -1 || col2 == -1 {
