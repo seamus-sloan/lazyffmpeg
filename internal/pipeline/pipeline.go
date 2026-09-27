@@ -79,16 +79,14 @@ func (p Pipeline) Remove(i int) Pipeline {
 	if i < 0 || i >= len(steps) {
 		return p
 	}
-	k := steps[i].Kind()
 	np := p.clone()
-	if k.IsFilter() {
-		idx := indexOfKind(np.filters, k)
-		if idx >= 0 {
-			np.filters = append(np.filters[:idx], np.filters[idx+1:]...)
-		}
+	if i < len(np.filters) {
+		// Steps() lists filters first, in np.filters' own order, so index
+		// i already addresses np.filters directly.
+		np.filters = append(np.filters[:i], np.filters[i+1:]...)
 		return np
 	}
-	delete(np.outputs, k)
+	delete(np.outputs, steps[i].Kind())
 	return np
 }
 
@@ -119,13 +117,4 @@ func (p Pipeline) clone() Pipeline {
 		np.outputs[k] = v
 	}
 	return np
-}
-
-func indexOfKind(steps []Step, k Kind) int {
-	for i, s := range steps {
-		if s.Kind() == k {
-			return i
-		}
-	}
-	return -1
 }

@@ -166,12 +166,7 @@ func (m Model) pickerGoParent() (Model, tea.Cmd) {
 	if parent == m.picker.dir {
 		return m, nil
 	}
-	m.picker.dir = parent
-	m.picker.cursor = 0
-	m.picker.filter = ""
-	m.picker.filtering = false
-	m.picker.status = ""
-	return m, m.listCmd()
+	return m.pickerOpenDir(parent)
 }
 
 func (m Model) pickerOpenDir(dir string) (Model, tea.Cmd) {

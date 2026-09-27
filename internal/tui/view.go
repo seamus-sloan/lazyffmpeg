@@ -317,18 +317,19 @@ func (m Model) menuLines() []string {
 		idx++
 	}
 
-	lines = append(lines, "Video")
-	addItem(menuItemLabel(pipeline.KindResolution))
-	addItem(menuItemLabel(pipeline.KindSpeed))
-	addItem(menuItemLabel(pipeline.KindTrim))
-	addItem(menuItemLabel(pipeline.KindFrameRate))
-	lines = append(lines, "")
-	lines = append(lines, "Output")
-	addItem(menuItemLabel(pipeline.KindEncoder))
-	addItem(menuItemLabel(pipeline.KindQuality))
-	addItem(menuItemLabel(pipeline.KindAudio))
-	addItem(menuItemLabel(pipeline.KindContainer))
-	addItem(menuItemLabel(pipeline.KindRawArgs))
+	// menuSectionHeadings names the heading inserted right before the
+	// menuKinds item at that index (0 = "Video", the first section, so it
+	// gets no separating blank line; every later heading does).
+	menuSectionHeadings := map[int]string{0: "Video", 4: "Output"}
+	for i, k := range menuKinds {
+		if h, ok := menuSectionHeadings[i]; ok {
+			if i > 0 {
+				lines = append(lines, "")
+			}
+			lines = append(lines, h)
+		}
+		addItem(menuItemLabel(k))
+	}
 	lines = append(lines, "")
 	addItem("Run")
 
