@@ -414,3 +414,21 @@ func TestMainDryRunNoFileUsageError(t *testing.T) {
 		t.Errorf("exit code = %d, want 2", code)
 	}
 }
+
+func TestSameAsInput(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "clip.mp4")
+	if err := os.WriteFile(in, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !app.SameAsInput(in, in) {
+		t.Error("SameAsInput(in, in) = false, want true")
+	}
+	if !app.SameAsInput(in, filepath.Join(dir, ".", "clip.mp4")) {
+		t.Error("SameAsInput did not resolve an unclean path to the same file")
+	}
+	if app.SameAsInput(in, filepath.Join(dir, "out.mp4")) {
+		t.Error("SameAsInput(in, out) = true, want false")
+	}
+}

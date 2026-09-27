@@ -25,9 +25,12 @@ func (m Model) View() tea.View {
 	}
 
 	var body string
-	if m.mode == modePicker {
+	switch {
+	case m.mode == modePicker:
 		body = m.renderPickerFrame()
-	} else {
+	case m.run.phase != runNone:
+		body = m.renderRunFrame()
+	default:
 		body = m.renderFrame()
 	}
 	if m.modal != nil {
@@ -123,6 +126,17 @@ func sideLine(width int, content string) string {
 	inner := width - 2
 	c := padOrTruncate(content, inner)
 	return "│" + c + "│"
+}
+
+// sideLineFlex is sideLine, except a line wider than the frame's inner
+// width is left un-truncated (dropping the closing border) rather than
+// silently cutting off critical text such as a confirmation prompt's path.
+func sideLineFlex(width int, content string) string {
+	inner := width - 2
+	if lipgloss.Width(content) > inner {
+		return "│" + content
+	}
+	return sideLine(width, content)
 }
 
 func padOrTruncate(s string, w int) string {

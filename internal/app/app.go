@@ -262,6 +262,14 @@ func versionString() string {
 	return "dev"
 }
 
+// SameAsInput reports whether output resolves to the same file as input:
+// by cleaned absolute path, or (when both exist) by os.SameFile. The TUI's
+// run path uses this to apply the same output-safety rule as the headless
+// path (see ErrSameAsInput).
+func SameAsInput(input, output string) bool {
+	return sameAsInput(input, output)
+}
+
 func sameAsInput(input, output string) bool {
 	absIn, err1 := filepath.Abs(input)
 	absOut, err2 := filepath.Abs(output)

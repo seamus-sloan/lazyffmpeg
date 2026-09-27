@@ -11,6 +11,7 @@ import (
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
+	"github.com/seamus-sloan/lazyffmpeg/internal/runner"
 )
 
 // screenMode names which screen the program is showing.
@@ -60,6 +61,7 @@ type Model struct {
 	mode   screenMode
 	picker pickerState
 	modal  *modalState
+	run    runState
 
 	session  app.Session
 	pipeline pipeline.Pipeline
@@ -77,6 +79,7 @@ type Model struct {
 
 	listFn  ListFunc
 	probeFn ProbeFunc
+	runFn   RunFunc
 }
 
 // Option configures a Model built by New.
@@ -108,6 +111,7 @@ func New(s app.Session, opts ...Option) Model {
 		pipeline: s.Pipeline,
 		listFn:   defaultList,
 		probeFn:  probe.Run,
+		runFn:    runner.Run,
 	}
 	if s.Input == "" {
 		m.mode = modePicker
@@ -149,12 +153,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pickerProbedMsg:
 		return m.handlePickerProbed(msg)
+
+	case runProgressMsg:
+		return m.handleRunProgress(msg)
+
+	case runDoneMsg:
+		return m.handleRunDone(msg)
 	}
 	return m, nil
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
+
+	if m.run.phase != runNone {
+		return m.handleRunKey(msg)
+	}
 
 	if m.showHelp {
 		m.showHelp = false
@@ -183,6 +197,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		m.showFullCommand = !m.showFullCommand
 		return m, nil
+	case "r":
+		return m.tryRun()
 	case "tab":
 		if m.focus == focusMenu {
 			m.focus = focusPipeline
@@ -202,7 +218,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "enter":
 			if m.menuCursor == menuRunIndex {
-				return m, nil // wired in Task 12
+				return m.tryRun()
 			}
 			m = m.openModal(menuKinds[m.menuCursor])
 			return m, nil
