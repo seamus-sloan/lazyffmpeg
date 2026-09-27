@@ -5,6 +5,8 @@ package tui
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -87,6 +89,7 @@ type Model struct {
 	listFn  ListFunc
 	probeFn ProbeFunc
 	runFn   RunFunc
+	runWG   *sync.WaitGroup // owned by Run; tracks in-flight runs across program exit
 }
 
 // Option configures a Model built by New.
@@ -107,6 +110,14 @@ func WithProber(fn ProbeFunc) Option {
 // context.
 func withContext(ctx context.Context) Option {
 	return func(m *Model) { m.ctx = ctx }
+}
+
+// withRunWaitGroup gives startRun a WaitGroup to register its background
+// goroutine with. It is unexported: only Run sets it, so it can wait
+// (bounded) for an in-flight run's cleanup after its own program loop
+// exits (see waitForRuns).
+func withRunWaitGroup(wg *sync.WaitGroup) Option {
+	return func(m *Model) { m.runWG = wg }
 }
 
 // New builds a Model for session, applying any Options. When session.Input
@@ -376,10 +387,35 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-// Run starts the TUI program for session and blocks until it exits.
+// runWaitTimeout bounds how long Run waits for an in-flight run to finish
+// its cleanup after the program loop itself has already exited.
+const runWaitTimeout = 5 * time.Second
+
+// Run starts the TUI program for session and blocks until it exits. When
+// the program's context is canceled (SIGINT/SIGTERM via tea.WithContext),
+// Bubble Tea's own event loop can exit before a run started from it has
+// finished cleaning up (e.g. removing a canceled run's temp file); Run
+// waits, bounded by runWaitTimeout, for any such run to actually finish
+// before returning.
 func Run(ctx context.Context, s app.Session) error {
-	m := New(s, withContext(ctx))
+	var wg sync.WaitGroup
+	m := New(s, withContext(ctx), withRunWaitGroup(&wg))
 	p := tea.NewProgram(m, tea.WithContext(ctx))
 	_, err := p.Run()
+	waitForRuns(&wg, runWaitTimeout)
 	return err
+}
+
+// waitForRuns blocks until wg's count reaches zero, or timeout elapses,
+// whichever comes first.
+func waitForRuns(wg *sync.WaitGroup, timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
 }

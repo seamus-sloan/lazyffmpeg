@@ -51,6 +51,7 @@ type runState struct {
 
 	pendingCancel bool
 	pendingQuit   bool
+	quitAfterRun  bool // set once quit is confirmed; tea.Quit fires from handleRunDone
 
 	cancel context.CancelFunc
 	msgs   chan tea.Msg
@@ -114,7 +115,14 @@ func (m Model) startRun(job runner.Job) (Model, tea.Cmd) {
 	m.run = runState{phase: runRunning, job: job, cancel: cancel, msgs: ch}
 
 	fn := m.runFn
+	wg := m.runWG
+	if wg != nil {
+		wg.Add(1)
+	}
 	go func() {
+		if wg != nil {
+			defer wg.Done()
+		}
 		onProgress := func(p runner.Progress) {
 			select {
 			case ch <- runProgressMsg(p):
@@ -144,23 +152,32 @@ func (m Model) handleRunProgress(msg runProgressMsg) (tea.Model, tea.Cmd) {
 	return m, waitForRunMsg(rs.msgs)
 }
 
+// handleRunDone reaches a run's final outcome. When a quit was confirmed
+// while the run was in progress (runState.quitAfterRun), tea.Quit fires
+// only here — once the run (and its cleanup, e.g. removing a canceled
+// run's temp file) has actually finished — never from the confirmation
+// keypress itself.
 func (m Model) handleRunDone(msg runDoneMsg) (tea.Model, tea.Cmd) {
 	rs := m.run
+	quit := rs.quitAfterRun
 	if msg.err != nil {
 		if errors.Is(msg.err, runner.ErrCanceled) {
 			rs.phase = runDone
 			rs.canceled = true
-			m.run = rs
-			return m, nil
+		} else {
+			rs.phase = runError
+			rs.err = msg.err
 		}
-		rs.phase = runError
-		rs.err = msg.err
-		m.run = rs
-		return m, nil
+	} else {
+		rs.phase = runDone
+		rs.result = msg.result
 	}
-	rs.phase = runDone
-	rs.result = msg.result
 	m.run = rs
+
+	if quit {
+		m.quitting = true
+		return m, tea.Quit
+	}
 	return m, nil
 }
 
@@ -213,8 +230,9 @@ func (m Model) handleRunningKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if rs.cancel != nil {
 				rs.cancel()
 			}
-			m.quitting = true
-			return m, tea.Quit
+			rs.pendingQuit = false
+			rs.quitAfterRun = true
+			m.run = rs
 		case "n", "esc":
 			rs.pendingQuit = false
 			m.run = rs
@@ -261,6 +279,9 @@ func (m Model) runBodyLines() []string {
 		}
 		if rs.pendingQuit {
 			lines = append(lines, "", "Quit and cancel encoding? (y/n)")
+		}
+		if rs.quitAfterRun {
+			lines = append(lines, "", "canceling…")
 		}
 		return lines
 

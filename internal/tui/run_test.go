@@ -8,7 +8,9 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -407,7 +409,7 @@ func TestEscWhileRunningPromptsCancel(t *testing.T) {
 	close(release)
 }
 
-func TestQuitWhileRunningPromptsThenCancelsAndQuits(t *testing.T) {
+func TestQuitWhileRunningWaitsForCleanupThenQuits(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	dir := t.TempDir()
@@ -418,7 +420,7 @@ func TestQuitWhileRunningPromptsThenCancelsAndQuits(t *testing.T) {
 	mm, cmd := m.Update(key("r"))
 	m = mm.(Model)
 	msg := cmd()
-	mm, _ = m.Update(msg)
+	mm, cmd = m.Update(msg)
 	m = mm.(Model)
 
 	mm, _ = m.Update(key("q"))
@@ -433,11 +435,100 @@ func TestQuitWhileRunningPromptsThenCancelsAndQuits(t *testing.T) {
 
 	mm, quitCmd := m.Update(key("y"))
 	m = mm.(Model)
+	if quitCmd != nil {
+		if _, ok := quitCmd().(tea.QuitMsg); ok {
+			t.Fatal("tea.Quit issued before the run finished")
+		}
+	}
+	if m.run.phase != runRunning || !m.run.quitAfterRun {
+		t.Fatalf("run = %+v, want still running with quitAfterRun set", m.run)
+	}
+	out = viewText(m)
+	if !strings.Contains(out, "canceling") {
+		t.Errorf("missing a canceling indicator, got:\n%s", out)
+	}
+
+	// y canceled the run's context; runningFake observes ctx.Done and
+	// returns, and only then does the still-armed listener command see
+	// the final message and yield tea.Quit.
+	msg = cmd()
+	mm, quitCmd = m.Update(msg)
+	m = mm.(Model)
 	if quitCmd == nil {
-		t.Fatal("y did not issue a quit command")
+		t.Fatal("no quit command once the run finished")
 	}
 	if _, ok := quitCmd().(tea.QuitMsg); !ok {
 		t.Error("expected tea.QuitMsg")
+	}
+}
+
+func TestStartRunRegistersWithRunWaitGroup(t *testing.T) {
+	var wg sync.WaitGroup
+	release := make(chan struct{})
+	defer close(release)
+	fake := func(ctx context.Context, job runner.Job, on func(runner.Progress)) (runner.Result, error) {
+		<-release
+		return runner.Result{}, nil
+	}
+	dir := t.TempDir()
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: filepath.Join(dir, "out.mp4")}
+	m := New(s, WithRunner(fake), withRunWaitGroup(&wg))
+	m = resized(m, 100, 30)
+
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("r issued no command")
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("waitgroup reached zero before the run goroutine finished")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	release <- struct{}{}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("run goroutine never called wg.Done()")
+	}
+}
+
+func TestWaitForRunsBlocksUntilWaitGroupDone(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	done := make(chan struct{})
+	go func() {
+		waitForRuns(&wg, time.Second)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("waitForRuns returned before wg.Done()")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	wg.Done()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("waitForRuns did not return promptly after wg.Done()")
+	}
+}
+
+func TestWaitForRunsRespectsTimeout(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1) // never Done()
+
+	start := time.Now()
+	waitForRuns(&wg, 50*time.Millisecond)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("waitForRuns took %v, want it bounded near its 50ms timeout", elapsed)
 	}
 }
 
