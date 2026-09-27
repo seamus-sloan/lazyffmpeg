@@ -224,6 +224,26 @@ func TestCompileEncoderDefaultCRF(t *testing.T) {
 	}
 }
 
+func TestCompileHardwareCRFMapsToQV(t *testing.T) {
+	cases := []struct {
+		crf  int
+		want string
+	}{
+		{0, "-q:v 100"},
+		{51, "-q:v 24"},
+	}
+	for _, c := range cases {
+		p := New(Encoder{Codec: CodecH264HW}, Quality{CRF: c.crf})
+		argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+		if err != nil {
+			t.Fatalf("Compile(CRF %d): %v", c.crf, err)
+		}
+		if !strings.Contains(strings.Join(argv, " "), c.want) {
+			t.Errorf("Compile(CRF %d) missing %q: %v", c.crf, c.want, argv)
+		}
+	}
+}
+
 func TestCompileQualityCRFReplacesDefault(t *testing.T) {
 	p := New(Encoder{Codec: CodecH264}, Quality{CRF: 30})
 	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
@@ -332,6 +352,54 @@ func TestCompileTargetSizeAV1OmitsMaxrateBufsize(t *testing.T) {
 	}
 	if !strings.Contains(joined, "-b:v") {
 		t.Errorf("argv missing -b:v: %v", argv)
+	}
+}
+
+func TestCompileTargetSizeVP9OmitsCRFModeBZero(t *testing.T) {
+	p := New(Encoder{Codec: CodecVP9}, Quality{TargetBytes: 20_000_000})
+	argv, err := Compile(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if strings.Contains(joined, "-b:v 0") {
+		t.Errorf("vp9 target mode should not carry the CRF-mode's -b:v 0: %v", argv)
+	}
+	want := "-b:v 4478k -maxrate 4478k -bufsize 8956k"
+	if !strings.Contains(joined, want) {
+		t.Errorf("argv missing target bitrate %q: %v", want, argv)
+	}
+}
+
+func TestCompileTargetSizeAudioRemovedSubtractsNothing(t *testing.T) {
+	p := New(Audio{Mode: AudioRemove}, Quality{TargetBytes: 20_000_000})
+	argv, err := Compile(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	// No audio bitrate subtracted: V = floor(20e6*8*0.95/33/1000) = 4606.
+	want := "-b:v 4606k -maxrate 4606k -bufsize 9212k"
+	if !strings.Contains(strings.Join(argv, " "), want) {
+		t.Errorf("argv missing target bitrate %q: %v", want, argv)
+	}
+}
+
+func TestCompileTargetSizeAudioCopiedSubtractsInputBitrate(t *testing.T) {
+	info := infoAAC(33)
+	info.Audio.BitRate = 96000
+	p := New(Quality{TargetBytes: 20_000_000})
+	argv, err := Compile(info, p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-c:a copy") {
+		t.Fatalf("expected audio copy, got: %v", argv)
+	}
+	// V = floor((20e6*8*0.95/33 - 96000)/1000) = 4510.
+	want := "-b:v 4510k -maxrate 4510k -bufsize 9020k"
+	if !strings.Contains(joined, want) {
+		t.Errorf("argv missing target bitrate %q: %v", want, argv)
 	}
 }
 
@@ -445,6 +513,41 @@ func TestCompileWebmDefaultsToVP9(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(argv, " "), "-c:v libvpx-vp9") {
 		t.Errorf("argv should default to libvpx-vp9 for webm: %v", argv)
+	}
+}
+
+func TestCompileWebmInferredFromOutputExtension(t *testing.T) {
+	// No Container step at all: the .webm output extension alone selects
+	// the webm container (and its libvpx-vp9 default, since there is no
+	// Encoder step either).
+	argv, err := Compile(infoVP9Webm(10), New(), Options{Input: "IN", Output: "OUT.webm"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-c:v libvpx-vp9") {
+		t.Errorf("argv should default to libvpx-vp9 for a .webm output: %v", argv)
+	}
+	if !strings.Contains(joined, "-c:a copy") {
+		t.Errorf("argv should copy the opus audio for a .webm output: %v", argv)
+	}
+}
+
+func TestCompileWebmAudioFiltersForceLibopusEvenForOpusInput(t *testing.T) {
+	// The input's audio is already opus (normally copied straight
+	// through), but a Speed step's atempo chain means the audio stream
+	// must be re-encoded, so it cannot simply be copied.
+	p := New(Speed{Factor: 2}, Container{Format: FormatWebM})
+	argv, err := Compile(infoVP9Webm(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-c:a libopus -b:a 128k") {
+		t.Errorf("argv should re-encode to libopus when audio filters apply: %v", argv)
+	}
+	if strings.Contains(joined, "-c:a copy") {
+		t.Errorf("argv should not copy audio when audio filters apply: %v", argv)
 	}
 }
 

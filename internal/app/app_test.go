@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/cli"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
+	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 	"github.com/seamus-sloan/lazyffmpeg/internal/testclip"
 )
 
@@ -115,6 +117,11 @@ func TestMainHeadlessSuccess(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 2, Audio: true})
 
+	inInfo, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run(in): %v", err)
+	}
+
 	a, out, errOut := newApp()
 	code := a.Main(context.Background(), []string{in, "--speed", "2"})
 	if code != 0 {
@@ -129,6 +136,39 @@ func TestMainHeadlessSuccess(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "→") {
 		t.Errorf("stdout = %q, want a before → after size line", out.String())
+	}
+
+	outInfo, err := probe.Run(context.Background(), wantOut)
+	if err != nil {
+		t.Fatalf("probe.Run(out): %v", err)
+	}
+	wantDur := inInfo.Duration / 2
+	if diff := outInfo.Duration - wantDur; diff > 0.15 || diff < -0.15 {
+		t.Errorf("output duration = %v, want ~%v (halved)", outInfo.Duration, wantDur)
+	}
+
+	lastPct := -1
+	sawEnd := false
+	for _, line := range strings.Split(strings.TrimSpace(errOut.String()), "\n") {
+		pctStr, ok := strings.CutPrefix(line, "progress: ")
+		if !ok {
+			continue
+		}
+		pctStr = strings.TrimSuffix(pctStr, "%")
+		pct, err := strconv.Atoi(pctStr)
+		if err != nil {
+			t.Fatalf("progress line %q: %v", line, err)
+		}
+		if pct < lastPct {
+			t.Errorf("progress went backwards: %d after %d", pct, lastPct)
+		}
+		lastPct = pct
+		if pct == 100 {
+			sawEnd = true
+		}
+	}
+	if !sawEnd {
+		t.Errorf("stderr never reached progress: 100%%, got:\n%s", errOut.String())
 	}
 }
 
@@ -244,6 +284,11 @@ func TestMainInPlace(t *testing.T) {
 	in := testclip.Make(t, testclip.Spec{Name: "clip at 1.02 PM.mp4", Width: 320, Height: 240, Seconds: 2})
 	dir := filepath.Dir(in)
 
+	inInfo, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run(in): %v", err)
+	}
+
 	a, _, errOut := newApp()
 	code := a.Main(context.Background(), []string{in, "--speed", "2", "--in-place"})
 	if code != 0 {
@@ -252,6 +297,16 @@ func TestMainInPlace(t *testing.T) {
 	if _, err := os.Stat(in); err != nil {
 		t.Errorf("in-place output missing: %v", err)
 	}
+
+	outInfo, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run(in-place result): %v", err)
+	}
+	wantDur := inInfo.Duration / 2
+	if diff := outInfo.Duration - wantDur; diff > 0.15 || diff < -0.15 {
+		t.Errorf("in-place output duration = %v, want ~%v (halved)", outInfo.Duration, wantDur)
+	}
+
 	matches, _ := filepath.Glob(filepath.Join(dir, ".lazyff-*"))
 	if len(matches) != 0 {
 		t.Errorf("leftover temp files: %v", matches)

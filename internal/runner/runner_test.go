@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -200,6 +201,49 @@ func TestRunCanceled(t *testing.T) {
 	}
 	if _, statErr := os.Stat(out); statErr == nil {
 		t.Error("output should not exist after cancel")
+	}
+	noLazyffTemps(t, dir)
+}
+
+func TestRunCanceledLeavesExistingOutputUnchanged(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 5, FPS: 30})
+	dir := filepath.Dir(in)
+	out := filepath.Join(dir, "out.mp4")
+
+	original := []byte("existing output content")
+	if err := os.WriteFile(out, original, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	info, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run: %v", err)
+	}
+	p := pipeline.New()
+	argv, err := pipeline.Compile(info, p, pipeline.Options{Input: in, Output: out})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	job := runner.Job{Argv: argv, Output: out, Duration: pipeline.OutputDuration(info, p)}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err = runner.Run(ctx, job, func(runner.Progress) {})
+	if !errors.Is(err, runner.ErrCanceled) {
+		t.Fatalf("err = %v, want ErrCanceled", err)
+	}
+
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Error("canceling a run changed a pre-existing output file")
 	}
 	noLazyffTemps(t, dir)
 }
