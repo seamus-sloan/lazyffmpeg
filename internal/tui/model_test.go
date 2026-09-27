@@ -120,6 +120,87 @@ func TestViewShowsPipelineAndMenu(t *testing.T) {
 	}
 }
 
+// allKindSteps holds one step of every kind, in Kind order, so a subset of
+// the first n gives a pipeline of exactly n distinct steps.
+func allKindSteps() []pipeline.Step {
+	return []pipeline.Step{
+		pipeline.Resolution{Width: 1920, Height: 1080},
+		pipeline.Speed{Factor: 2},
+		pipeline.Trim{Start: 1, End: 3},
+		pipeline.FrameRate{FPS: 30},
+		pipeline.Encoder{Codec: pipeline.CodecH265},
+		pipeline.Quality{CRF: 20},
+		pipeline.Audio{Mode: pipeline.AudioAAC, BitrateK: 128},
+		pipeline.Container{Format: pipeline.FormatMKV},
+		pipeline.RawArgs{Text: "-map_metadata -1", Args: []string{"-map_metadata", "-1"}},
+	}
+}
+
+func TestMainFrameFitsTerminalHeight(t *testing.T) {
+	all := allKindSteps()
+	for _, n := range []int{3, 6, 9} {
+		pl := pipeline.New(all[:n]...)
+		m := resized(New(testSession(pl)), 100, 30)
+
+		out := viewText(m)
+		if h := strings.Count(out, "\n") + 1; h > 30 {
+			t.Errorf("%d steps: view is %d lines tall in a 30-line terminal, want <= 30:\n%s", n, h, out)
+		}
+		if !strings.Contains(out, "→ "+m.session.OutputPath(m.pipeline)) {
+			t.Errorf("%d steps: footer output-path line missing, got:\n%s", n, out)
+		}
+		if !strings.HasSuffix(strings.TrimRight(out, "\n"), "╯") {
+			t.Errorf("%d steps: bottom border missing, got:\n%s", n, out)
+		}
+
+		mm, _ := m.Update(key("c"))
+		expanded := mm.(Model)
+		outExpanded := viewText(expanded)
+		if h := strings.Count(outExpanded, "\n") + 1; h > 30 {
+			t.Errorf("%d steps, c expanded: view is %d lines tall, want <= 30:\n%s", n, h, outExpanded)
+		}
+	}
+}
+
+func TestFullCommandFullyShownAcrossFooterLinesWhenExpanded(t *testing.T) {
+	long := strings.Repeat("y", 150)
+	pl := pipeline.New(pipeline.RawArgs{Text: long, Args: []string{long}})
+	m := resized(New(testSession(pl)), 100, 30)
+
+	mm, _ := m.Update(key("c"))
+	m = mm.(Model)
+
+	commandLines, _ := m.footerLines()
+	if !strings.Contains(strings.Join(commandLines, ""), long) {
+		t.Fatalf("full command not fully present across the wrapped footer lines: %v", commandLines)
+	}
+
+	out := viewText(m)
+	if h := strings.Count(out, "\n") + 1; h > 30 {
+		t.Errorf("view is %d lines tall in a 30-line terminal after c, want <= 30:\n%s", h, out)
+	}
+}
+
+func TestPipelineWindowKeepsCursorVisible(t *testing.T) {
+	cases := []struct{ stepCount, visible, cursor, wantStart, wantEnd int }{
+		{9, 9, 4, 0, 9}, // fits entirely: no scroll
+		{9, 3, 0, 0, 3}, // cursor at the top
+		{9, 3, 8, 6, 9}, // cursor at the bottom
+		{9, 3, 4, 3, 6}, // cursor centered
+	}
+	for _, c := range cases {
+		start, end := pipelineWindow(c.stepCount, c.visible, c.cursor)
+		if start != c.wantStart || end != c.wantEnd {
+			t.Errorf("pipelineWindow(%d,%d,%d) = (%d,%d), want (%d,%d)",
+				c.stepCount, c.visible, c.cursor, start, end, c.wantStart, c.wantEnd)
+		}
+		if c.cursor < start || c.cursor >= end {
+			t.Errorf("pipelineWindow(%d,%d,%d) = (%d,%d) excludes the cursor",
+				c.stepCount, c.visible, c.cursor, start, end)
+		}
+	}
+}
+
 func TestViewTooSmall(t *testing.T) {
 	m := New(testSession(pipeline.New()))
 	m = resized(m, 60, 20)

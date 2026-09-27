@@ -65,17 +65,67 @@ func (m Model) leftColumnWidth() int {
 	return w
 }
 
+// minPreviewRows is the smallest the preview box's content area ever
+// shrinks to when the frame is squeezed to fit the terminal height.
+const minPreviewRows = 3
+
+// layoutBudget divides the rows left after every fixed line (borders,
+// info line, PIPELINE heading, footer) between the preview box and the
+// PIPELINE list so the whole frame never exceeds m.height: the preview
+// box shrinks first, down to minPreviewRows; once that floor is hit, the
+// PIPELINE list itself is capped (and scrolled, see pipelineWindow) down
+// to a floor of one row.
+func (m Model) layoutBudget(footerLineCount, stepCount int) (previewRows, pipelineRows int) {
+	// 3: top border, the blank line above the footer, bottom border.
+	// 2: the preview box's own top/bottom border.
+	// 1+1+1: info line, blank line, "PIPELINE" heading.
+	// footerLineCount + 1: the footer's command line(s) plus its second
+	// (estimate/output/hints) line, which footerLineCount does not count.
+	fixed := 3 + 2 + 1 + 1 + 1 + footerLineCount + 1
+	available := m.height - fixed
+
+	pipelineWant := maxInt(1, stepCount)
+	if available-pipelineWant >= minPreviewRows {
+		return available - pipelineWant, pipelineWant
+	}
+	previewRows = minPreviewRows
+	pipelineRows = available - previewRows
+	if pipelineRows < 1 {
+		pipelineRows = 1
+	}
+	return previewRows, pipelineRows
+}
+
 func (m Model) previewBoxSize() (cols, rows int) {
 	boxWidth := m.leftColumnWidth() - 2
 	if boxWidth < 10 {
 		boxWidth = 10
 	}
-	bodyHeight := m.height - 9
-	boxRows := bodyHeight - 2
-	if boxRows < 3 {
-		boxRows = 3
+	rows, _ = m.layoutBudget(m.footerLineCount(), m.pipeline.Len())
+	if rows < minPreviewRows {
+		rows = minPreviewRows
 	}
-	return boxWidth, boxRows
+	return boxWidth, rows
+}
+
+// pipelineWindow returns the [start,end) slice of a stepCount-long
+// PIPELINE list that fits within visible rows while keeping cursor in
+// view, scrolling only as far as needed.
+func pipelineWindow(stepCount, visible, cursor int) (start, end int) {
+	if visible >= stepCount {
+		return 0, stepCount
+	}
+	if visible < 1 {
+		visible = 1
+	}
+	start = cursor - visible/2
+	if start+visible > stepCount {
+		start = stepCount - visible
+	}
+	if start < 0 {
+		start = 0
+	}
+	return start, start + visible
 }
 
 func frameTop(width int, title string) string {
@@ -129,8 +179,10 @@ func (m Model) renderFrame() string {
 	}
 	lines = append(lines, sideLine(width, ""))
 
-	line1, line2 := m.footerLines()
-	lines = append(lines, sideLine(width, padOrTruncate(line1, m.innerWidth())))
+	commandLines, line2 := m.footerLines()
+	for _, cl := range commandLines {
+		lines = append(lines, sideLine(width, padOrTruncate(cl, m.innerWidth())))
+	}
 	lines = append(lines, sideLine(width, padOrTruncate(line2, m.innerWidth())))
 	lines = append(lines, bottom)
 
@@ -223,8 +275,12 @@ func (m Model) pipelineLines() []string {
 	if len(steps) == 0 {
 		return []string{dimStyle.Render("(empty)")}
 	}
-	lines := make([]string, 0, len(steps))
-	for i, s := range steps {
+	_, maxRows := m.layoutBudget(m.footerLineCount(), len(steps))
+	start, end := pipelineWindow(len(steps), maxRows, m.pipelineCursor)
+
+	lines := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		s := steps[i]
 		prefix := "  "
 		if m.focus == focusPipeline && i == m.pipelineCursor {
 			prefix = "> "
@@ -270,19 +326,23 @@ func (m Model) menuLines() []string {
 	return lines
 }
 
-func (m Model) footerLines() (string, string) {
+// footerLines returns the footer's command line(s) (a single truncated
+// line normally, or as many hard-wrapped lines as needed when the full
+// command is expanded) and its second line (estimate, output path, key
+// hints).
+func (m Model) footerLines() ([]string, string) {
 	outputPath := m.session.OutputPath(m.pipeline)
 	opts := pipeline.Options{Input: m.session.Input, Output: outputPath}
 
-	var line1 string
+	var raw string
 	if m.notice != "" {
-		line1 = m.notice
+		raw = m.notice
 	} else if argv, err := pipeline.Compile(m.session.Info, m.pipeline, opts); err != nil {
-		line1 = err.Error()
+		raw = err.Error()
 	} else {
-		line1 = pipeline.QuoteCommand(argv)
+		raw = pipeline.QuoteCommand(argv)
 	}
-	line1 = m.footerCommandLine(line1)
+	commandLines := m.footerCommandLines(raw)
 
 	sizeStr := "–"
 	durStr := "--:--"
@@ -293,18 +353,44 @@ func (m Model) footerLines() (string, string) {
 	hints := "r run · tab focus · ? help · q quit"
 	line2 := fmt.Sprintf("~%s · %s → %s  %s", sizeStr, durStr, outputPath, hints)
 
-	return line1, line2
+	return commandLines, line2
 }
 
-func (m Model) footerCommandLine(raw string) string {
+// footerLineCount is the number of lines footerLines' command portion
+// currently occupies, used to size the rest of the frame around it.
+func (m Model) footerLineCount() int {
+	lines, _ := m.footerLines()
+	return len(lines)
+}
+
+func (m Model) footerCommandLines(raw string) []string {
 	avail := m.innerWidth()
-	if m.showFullCommand {
-		return raw
+	if !m.showFullCommand {
+		if lipgloss.Width(raw) > avail {
+			return []string{truncateToWidth(raw, maxInt(avail-1, 0)) + "…"}
+		}
+		return []string{raw}
 	}
-	if lipgloss.Width(raw) > avail {
-		return truncateToWidth(raw, maxInt(avail-1, 0)) + "…"
+	return wrapText(raw, avail)
+}
+
+// wrapText hard-wraps s into chunks of at most width runes each (the
+// footer's expanded command has no ANSI styling to worry about breaking).
+func wrapText(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
 	}
-	return raw
+	r := []rune(s)
+	if len(r) == 0 {
+		return []string{""}
+	}
+	var lines []string
+	for len(r) > width {
+		lines = append(lines, string(r[:width]))
+		r = r[width:]
+	}
+	lines = append(lines, string(r))
+	return lines
 }
 
 func (m Model) helpText() string {
