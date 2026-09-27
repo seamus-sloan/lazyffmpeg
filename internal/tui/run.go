@@ -13,6 +13,7 @@ import (
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
+	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 	"github.com/seamus-sloan/lazyffmpeg/internal/runner"
 	"github.com/seamus-sloan/lazyffmpeg/internal/units"
 )
@@ -64,6 +65,36 @@ type runProgressMsg runner.Progress
 type runDoneMsg struct {
 	result runner.Result
 	err    error
+}
+
+// runReprobedMsg carries the outcome of re-probing the input after a
+// successful --in-place run: the file on disk has changed underneath the
+// session, so its probed Info (duration, size, ...) needs refreshing.
+type runReprobedMsg struct {
+	info probe.Info
+	err  error
+}
+
+// reprobeCmd re-probes the session's input, for after a successful
+// --in-place run.
+func (m Model) reprobeCmd() tea.Cmd {
+	fn := m.probeFn
+	ctx := m.ctx
+	path := m.session.Input
+	return func() tea.Msg {
+		info, err := fn(ctx, path)
+		return runReprobedMsg{info: info, err: err}
+	}
+}
+
+// handleRunReprobed applies a successful re-probe's fresh Info to the
+// session; a failed re-probe leaves the (now stale, but still usable)
+// existing Info in place.
+func (m Model) handleRunReprobed(msg runReprobedMsg) (tea.Model, tea.Cmd) {
+	if msg.err == nil {
+		m.session.Info = msg.info
+	}
+	return m, nil
 }
 
 func fileExists(path string) bool {
@@ -164,6 +195,7 @@ func (m Model) handleRunProgress(msg runProgressMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleRunDone(msg runDoneMsg) (tea.Model, tea.Cmd) {
 	rs := m.run
 	quit := rs.quitAfterRun
+	succeeded := msg.err == nil
 	if msg.err != nil {
 		if errors.Is(msg.err, runner.ErrCanceled) {
 			rs.phase = runDone
@@ -181,6 +213,13 @@ func (m Model) handleRunDone(msg runDoneMsg) (tea.Model, tea.Cmd) {
 	if quit {
 		m.quitting = true
 		return m, tea.Quit
+	}
+	if succeeded && m.session.InPlace {
+		// The file on disk changed underneath the session: re-probe it
+		// and drop undo history, which no longer applies to whatever the
+		// new file now contains.
+		m.undo = nil
+		return m, m.reprobeCmd()
 	}
 	return m, nil
 }

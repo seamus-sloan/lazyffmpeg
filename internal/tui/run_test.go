@@ -16,6 +16,7 @@ import (
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
+	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 	"github.com/seamus-sloan/lazyffmpeg/internal/runner"
 )
 
@@ -302,6 +303,60 @@ func TestProgressViewUpdatesAndIgnoresMainKeys(t *testing.T) {
 	m = mm.(Model)
 	if m.focus != before {
 		t.Error("tab changed focus while a run was in progress")
+	}
+}
+
+func TestSuccessfulInPlaceRunReprobesInputAndClearsUndo(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "clip.mov")
+	if err := os.WriteFile(in, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fake := func(ctx context.Context, job runner.Job, on func(runner.Progress)) (runner.Result, error) {
+		return runner.Result{Output: job.Output, Size: 500}, nil
+	}
+	newInfo := probe.Info{Duration: 16.5, SizeBytes: 500}
+	probed := 0
+	prober := func(ctx context.Context, path string) (probe.Info, error) {
+		probed++
+		if path != in {
+			t.Errorf("reprobed %q, want %q", path, in)
+		}
+		return newInfo, nil
+	}
+	s := app.Session{Input: in, Info: testInfo(), InPlace: true, Force: true}
+	m := New(s, WithRunner(fake), WithProber(prober))
+	m = resized(m, 100, 30)
+	m.undo = []pipeline.Pipeline{pipeline.New()}
+
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	msg := cmd()
+	mm, cmd = m.Update(msg)
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("no reprobe command issued after a successful in-place run")
+	}
+	mm, _ = m.Update(cmd())
+	m = mm.(Model)
+
+	if probed != 1 {
+		t.Fatalf("prober called %d times, want 1", probed)
+	}
+	if m.session.Info.Duration != 16.5 {
+		t.Errorf("session.Info.Duration = %v, want 16.5", m.session.Info.Duration)
+	}
+	if len(m.undo) != 0 {
+		t.Errorf("undo depth after an in-place run = %d, want 0 (cleared)", len(m.undo))
+	}
+
+	// Dismiss the result screen: the main screen's info line and estimate
+	// now reflect the reprobed duration.
+	mm, _ = m.Update(key("z"))
+	m = mm.(Model)
+	out := viewText(m)
+	if !strings.Contains(out, "00:16") {
+		t.Errorf("info line did not reflect the reprobed duration, got:\n%s", out)
 	}
 }
 

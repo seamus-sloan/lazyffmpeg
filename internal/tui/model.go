@@ -190,6 +190,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runDoneMsg:
 		return m.handleRunDone(msg)
 
+	case runReprobedMsg:
+		return m.handleRunReprobed(msg)
+
 	case previewFrameMsg:
 		return m.handlePreviewFrame(msg)
 
