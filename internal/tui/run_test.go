@@ -33,6 +33,33 @@ func runningFake(release chan struct{}) RunFunc {
 	}
 }
 
+func TestStartingARunStopsPlaybackAndIgnoresPreviewTicks(t *testing.T) {
+	fn, _ := fakeRenderer("F", nil)
+	release := make(chan struct{})
+	defer close(release)
+	dir := t.TempDir()
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: filepath.Join(dir, "out.mp4")}
+	m := step(t, New(s, WithRenderer(fn, true), WithRunner(runningFake(release))), tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	mm, _ := m.Update(key("space"))
+	m = mm.(Model)
+	if !m.preview.playing {
+		t.Fatal("space did not start playback")
+	}
+
+	mm, _ = m.Update(key("r"))
+	m = mm.(Model)
+	if m.preview.playing {
+		t.Error("starting a run did not stop preview playback")
+	}
+
+	mm, _ = m.Update(previewTickMsg{})
+	m = mm.(Model)
+	if m.run.phase == runRunning && m.preview.pendingSeq != 0 {
+		t.Error("a preview tick started a frame decode during the run")
+	}
+}
+
 func TestTryRunCallsRunFuncWithCompiledJob(t *testing.T) {
 	release := make(chan struct{})
 	var gotJob runner.Job

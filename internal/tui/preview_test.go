@@ -410,6 +410,25 @@ func TestResizeRequestsFreshRender(t *testing.T) {
 	}
 }
 
+// TestResultModeRerenderClampsPreviewTimeIntoNewRange covers a pipeline
+// edit in result mode that shrinks the playable range out from under the
+// preview's current position: the follow-up render must land inside the
+// new range, not at the stale position.
+func TestResultModeRerenderClampsPreviewTimeIntoNewRange(t *testing.T) {
+	fn, reqs := fakeRenderer("F", nil)
+	m := step(t, New(testSession(pipeline.New()), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = step(t, m, key("v"))
+	m.preview.time = 30
+	m = openMenu(t, m, pipeline.KindTrim)
+	m = typeText(m, "1-3")
+	m = step(t, m, key("enter"))
+
+	last := (*reqs)[len(*reqs)-1]
+	if last.Time < 1 || last.Time > 3 {
+		t.Fatalf("result preview rendered at %vs, want inside the new [1,3] range", last.Time)
+	}
+}
+
 func TestPipelineChangeInResultModeRerenders(t *testing.T) {
 	pl := pipeline.New(pipeline.FrameRate{FPS: 30})
 	fn, reqs := fakeRenderer("F", nil)

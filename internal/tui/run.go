@@ -113,6 +113,10 @@ func (m Model) startRun(job runner.Job) (Model, tea.Cmd) {
 	ch := make(chan tea.Msg, 16)
 
 	m.run = runState{phase: runRunning, job: job, cancel: cancel, msgs: ch}
+	if m.preview.playing {
+		m.preview.playing = false
+		m.preview.playGen++ // invalidate any tick still ticking down from before the run
+	}
 
 	fn := m.runFn
 	wg := m.runWG

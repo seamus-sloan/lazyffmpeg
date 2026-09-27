@@ -186,7 +186,7 @@ func (m Model) togglePlay() (Model, tea.Cmd) {
 }
 
 func (m Model) handlePreviewTick(msg previewTickMsg) (tea.Model, tea.Cmd) {
-	if !m.preview.playing || msg.gen != m.preview.playGen {
+	if m.run.phase != runNone || !m.preview.playing || msg.gen != m.preview.playGen {
 		return m, nil
 	}
 	rate := 1.0
