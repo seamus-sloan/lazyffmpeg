@@ -195,27 +195,7 @@ func (a App) Main(ctx context.Context, args []string) int {
 	}
 	outputPath := session.OutputPath(cfg.Pipeline)
 
-	if cfg.DryRun {
-		if cfg.InPlace {
-			if err := CheckInPlace(input, cfg.Pipeline); err != nil {
-				fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
-				return 1
-			}
-		}
-		if !cfg.InPlace && SameAsInput(input, outputPath) {
-			fmt.Fprintf(a.Stderr, "lazyff: %v\n", ErrSameAsInput)
-			return 1
-		}
-		argv, err := pipeline.Compile(info, cfg.Pipeline, pipeline.Options{Input: input, Output: outputPath})
-		if err != nil {
-			fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(a.Stdout, pipeline.QuoteCommand(argv))
-		return 0
-	}
-
-	if !cfg.HasSteps || cfg.TUI {
+	if !cfg.DryRun && (!cfg.HasSteps || cfg.TUI) {
 		return a.launchTUI(ctx, session)
 	}
 
@@ -231,7 +211,7 @@ func (a App) Main(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	if !cfg.InPlace && !cfg.Force {
+	if !cfg.DryRun && !cfg.InPlace && !cfg.Force {
 		if _, statErr := os.Stat(outputPath); statErr == nil {
 			err := fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, outputPath)
 			fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
@@ -243,6 +223,11 @@ func (a App) Main(ctx context.Context, args []string) int {
 	if err != nil {
 		fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
 		return 1
+	}
+
+	if cfg.DryRun {
+		fmt.Fprintln(a.Stdout, pipeline.QuoteCommand(argv))
+		return 0
 	}
 
 	job := runner.Job{

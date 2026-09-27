@@ -113,6 +113,64 @@ func TestMainDryRun(t *testing.T) {
 	}
 }
 
+func TestMainDryRunWithoutStepsPrintsInsteadOfLaunchingTUI(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+
+	a, out, errOut := newApp()
+	a.LaunchTUI = func(ctx context.Context, s app.Session) error {
+		t.Error("--dry-run must not launch the TUI")
+		return nil
+	}
+	code := a.Main(context.Background(), []string{in, "--dry-run"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0, stderr=%s", code, errOut.String())
+	}
+	if !strings.HasPrefix(out.String(), "ffmpeg ") {
+		t.Errorf("stdout = %q, want the ffmpeg command", out.String())
+	}
+}
+
+func TestMainDryRunIgnoresAnExistingOutput(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+	existing := filepath.Join(filepath.Dir(in), "existing.mp4")
+	if err := os.WriteFile(existing, []byte("marker"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--speed", "2", "-o", existing, "--dry-run"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0, stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), existing) {
+		t.Errorf("stdout = %q, want it to contain %q", out.String(), existing)
+	}
+}
+
+func TestMainDryRunStillRejectsUnsafeOutputs(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+	gif := testclip.Make(t, testclip.Spec{Name: "clip.gif", Width: 320, Height: 240, Seconds: 1})
+
+	cases := map[string][]string{
+		"same as input":         {in, "--speed", "2", "-o", in, "--dry-run"},
+		"in-place unsupported":  {gif, "--speed", "2", "--in-place", "--dry-run"},
+		"in-place wrong format": {in, "--in-place", "--container", "mkv", "--dry-run"},
+		"invalid pipeline":      {in, "--encoder", "copy", "--speed", "2", "--dry-run"},
+	}
+	for name, args := range cases {
+		a, out, _ := newApp()
+		if code := a.Main(context.Background(), args); code != 1 {
+			t.Errorf("%s: exit code = %d, want 1", name, code)
+		}
+		if out.Len() != 0 {
+			t.Errorf("%s: stdout = %q, want no command printed", name, out.String())
+		}
+	}
+}
+
 func TestMainHeadlessSuccess(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 2, Audio: true})
