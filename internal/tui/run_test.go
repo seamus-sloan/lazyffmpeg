@@ -61,6 +61,34 @@ func TestStartingARunStopsPlaybackAndIgnoresPreviewTicks(t *testing.T) {
 	}
 }
 
+func TestMenuRunEntryCallsRunFuncExactlyOnce(t *testing.T) {
+	var calls int
+	fake := func(ctx context.Context, job runner.Job, onProgress func(runner.Progress)) (runner.Result, error) {
+		calls++
+		return runner.Result{Output: job.Output}, nil
+	}
+	dir := t.TempDir()
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: filepath.Join(dir, "out.mp4")}
+	m := New(s, WithRunner(fake))
+	m = resized(m, 100, 30)
+	m.focus = focusMenu
+	m.menuCursor = menuRunIndex
+
+	mm, cmd := m.Update(key("enter"))
+	m = mm.(Model)
+	if m.modal != nil {
+		t.Fatal("enter on the Run item opened a modal")
+	}
+	if cmd == nil {
+		t.Fatal("enter on the Run item issued no run command")
+	}
+	cmd() // drains the first progress/done message so the fake has run
+
+	if calls != 1 {
+		t.Errorf("RunFunc called %d times, want 1", calls)
+	}
+}
+
 func TestTryRunCallsRunFuncWithCompiledJob(t *testing.T) {
 	release := make(chan struct{})
 	var gotJob runner.Job

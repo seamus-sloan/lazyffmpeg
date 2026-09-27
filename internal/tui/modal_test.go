@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 )
 
@@ -352,24 +350,5 @@ func TestQualityPresetsUseCurrentEncoderDefaultCRF(t *testing.T) {
 	out := viewText(m)
 	if !strings.Contains(out, "Default (CRF 33)") {
 		t.Errorf("Quality modal missing vp9's default CRF, got:\n%s", out)
-	}
-}
-
-func TestMenuRunDoesNothingYet(t *testing.T) {
-	m := New(testSession(pipeline.New()))
-	m = resized(m, 100, 30)
-	m.focus = focusMenu
-	m.menuCursor = menuRunIndex
-
-	mm, cmd := m.Update(key("enter"))
-	m = mm.(Model)
-	if m.modal != nil {
-		t.Error("enter on the Run item opened a modal")
-	}
-	if cmd != nil {
-		msg := cmd()
-		if _, ok := msg.(tea.QuitMsg); ok {
-			t.Error("enter on the Run item quit the program")
-		}
 	}
 }
