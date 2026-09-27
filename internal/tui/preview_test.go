@@ -11,6 +11,7 @@ import (
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/preview"
+	"github.com/seamus-sloan/lazyffmpeg/internal/units"
 )
 
 // fakeRenderer returns a RenderFunc that records every request it
@@ -150,6 +151,53 @@ func TestToggleResultMode(t *testing.T) {
 	out = viewText(m)
 	if !strings.Contains(out, "original") {
 		t.Errorf("preview label did not read 'original', got:\n%s", out)
+	}
+}
+
+func TestClampRenderTimeStaysOneFrameBeforeRangeEnd(t *testing.T) {
+	cases := []struct{ t, lo, hi, fps, want float64 }{
+		{33, 0, 33, 30, 33 - 1.0/30},
+		{5, 0, 33, 30, 5},            // well inside the range: unaffected
+		{-1, 0, 33, 30, 0},           // below lo: clamped up to lo
+		{100, 0, 33, 0, 33 - 1.0/30}, // fps <= 0 falls back to 30
+	}
+	for _, c := range cases {
+		if got := clampRenderTime(c.t, c.lo, c.hi, c.fps); got != c.want {
+			t.Errorf("clampRenderTime(%v,%v,%v,%v) = %v, want %v", c.t, c.lo, c.hi, c.fps, got, c.want)
+		}
+	}
+}
+
+func TestPreviewRequestClampsTimeAtRangeEnd(t *testing.T) {
+	fn, reqs := fakeRenderer("F", nil)
+	m := step(t, New(testSession(pipeline.New()), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.preview.time = m.session.Info.Duration // seek to exactly the clip's end
+
+	_, cmd := m.requestRender()
+	if cmd == nil {
+		t.Fatal("requestRender issued no command")
+	}
+	cmd()
+
+	last := (*reqs)[len(*reqs)-1]
+	fps := m.session.Info.Video.FPS
+	want := m.session.Info.Duration - 1/fps
+	if last.Time != want {
+		t.Errorf("render request Time at the range end = %v, want %v (one frame before the end)", last.Time, want)
+	}
+	argv := preview.FrameArgs(last)
+	wantSS := units.FormatNumber(want)
+	found := false
+	for i, a := range argv {
+		if a == "-ss" {
+			found = true
+			if argv[i+1] != wantSS {
+				t.Errorf("-ss = %q, want %q", argv[i+1], wantSS)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("-ss not present in FrameArgs argv")
 	}
 }
 

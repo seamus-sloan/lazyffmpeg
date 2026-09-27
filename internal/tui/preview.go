@@ -76,14 +76,31 @@ func (m Model) previewRequest() preview.Request {
 	if m.preview.resultMode {
 		filter = pipeline.SpatialVideoFilter(m.pipeline)
 	}
+	lo, hi := m.previewRange()
 	return preview.Request{
 		Input:  m.session.Input,
-		Time:   m.preview.time,
+		Time:   clampRenderTime(m.preview.time, lo, hi, m.session.Info.Video.FPS),
 		Filter: filter,
 		Cols:   cols,
 		Rows:   rows,
 		Colors: m.colorProfile,
 	}
+}
+
+// clampRenderTime clamps t into [lo,hi], except its effective upper bound
+// is max(lo, hi-1/fps) rather than hi itself: a request for a frame at or
+// past the clip's exact duration can decode no frame at all, so the
+// render always asks for a moment strictly before the range's end. fps
+// falls back to 30 when the input's frame rate is unknown.
+func clampRenderTime(t, lo, hi, fps float64) float64 {
+	if fps <= 0 {
+		fps = 30
+	}
+	upper := hi - 1/fps
+	if upper < lo {
+		upper = lo
+	}
+	return clampFloat(t, lo, upper)
 }
 
 // requestRender asks for a fresh frame at the preview's current state. At
