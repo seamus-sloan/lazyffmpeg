@@ -1,7 +1,7 @@
 // Package preview renders one video frame, at a given input-timeline
 // position, as terminal text: ffmpeg decodes and scales a single frame to
-// PNG on stdout, piped (never through a shell) into chafa, which turns it
-// into styled terminal symbols.
+// PNG on stdout, buffered in memory and then fed (never through a shell)
+// to chafa's stdin, which turns it into styled terminal symbols.
 package preview
 
 import (
@@ -63,9 +63,9 @@ func Available() bool {
 	return err == nil
 }
 
-// Render decodes r's frame with ffmpeg and renders it with chafa, piping
-// one process's stdout into the other's stdin directly (never through a
-// shell). The result has at most r.Rows lines.
+// Render decodes r's frame with ffmpeg, buffers the PNG bytes it writes to
+// stdout, and feeds that buffer to chafa's stdin (never through a shell) to
+// render it. The result has at most r.Rows lines.
 func Render(ctx context.Context, r Request) (string, error) {
 	ffArgv := FrameArgs(r)
 	ffCmd := exec.CommandContext(ctx, ffArgv[0], ffArgv[1:]...)

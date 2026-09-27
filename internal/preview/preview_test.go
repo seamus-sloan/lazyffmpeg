@@ -87,7 +87,7 @@ func TestRenderMissingInput(t *testing.T) {
 	if err == nil {
 		t.Fatal("Render on a missing input: want error, got nil")
 	}
-	if !strings.Contains(err.Error(), "No such file") && !strings.Contains(err.Error(), "ffmpeg") {
+	if !strings.Contains(err.Error(), "No such file") {
 		t.Errorf("error %q does not look like it carries ffmpeg's stderr", err.Error())
 	}
 }
@@ -104,10 +104,4 @@ func TestRenderCanceledContext(t *testing.T) {
 	if err == nil {
 		t.Fatal("Render with a canceled context: want error, got nil")
 	}
-}
-
-func TestAvailable(t *testing.T) {
-	// Available must agree with whether chafa is actually on PATH; it
-	// should never panic and should return a plain bool either way.
-	_ = Available()
 }

@@ -241,7 +241,6 @@ func TestProgressViewUpdatesAndIgnoresMainKeys(t *testing.T) {
 }
 
 func TestRunCompletionShowsResultAnyKeyReturns(t *testing.T) {
-	release := make(chan struct{})
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "out.mp4")
 	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: outputPath}
@@ -250,13 +249,13 @@ func TestRunCompletionShowsResultAnyKeyReturns(t *testing.T) {
 	}
 	m := New(s, WithRunner(fake))
 	m = resized(m, 100, 30)
+	wantLen := m.pipeline.Len()
 
 	mm, cmd := m.Update(key("r"))
 	m = mm.(Model)
 	msg := cmd()
 	mm, _ = m.Update(msg)
 	m = mm.(Model)
-	close(release)
 
 	if m.run.phase != runDone {
 		t.Fatalf("run.phase = %v, want runDone", m.run.phase)
@@ -274,8 +273,8 @@ func TestRunCompletionShowsResultAnyKeyReturns(t *testing.T) {
 	if m.run.phase != runNone {
 		t.Error("a key on the result view did not return to the main screen")
 	}
-	if _, ok := m.pipeline.Find(pipeline.KindResolution); ok {
-		t.Error("unexpected pipeline mutation")
+	if m.pipeline.Len() != wantLen {
+		t.Errorf("pipeline.Len() after the run = %d, want %d (unchanged)", m.pipeline.Len(), wantLen)
 	}
 }
 
