@@ -65,10 +65,16 @@ func Make(t testing.TB, s Spec) string {
 	}
 
 	videoCodec := "libx264"
-	if ext == ".webm" {
+	switch ext {
+	case ".webm":
 		videoCodec = "libvpx-vp9"
+	case ".gif":
+		videoCodec = "gif"
 	}
-	argv = append(argv, "-c:v", videoCodec, "-pix_fmt", "yuv420p")
+	argv = append(argv, "-c:v", videoCodec)
+	if ext != ".gif" {
+		argv = append(argv, "-pix_fmt", "yuv420p")
+	}
 
 	if s.Audio {
 		audioCodec := "aac"

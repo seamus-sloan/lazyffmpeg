@@ -88,6 +88,13 @@ func (m Model) tryRun() (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.session.InPlace {
+		if err := app.CheckInPlace(m.session.Input, m.pipeline); err != nil {
+			m.run = runState{phase: runError, err: err}
+			return m, nil
+		}
+	}
+
 	dur := pipeline.OutputDuration(m.session.Info, m.pipeline)
 	job := runner.Job{Argv: argv, Output: outputPath, Duration: dur}
 

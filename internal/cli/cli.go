@@ -5,7 +5,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -185,15 +184,11 @@ func Parse(args []string) (Config, error) {
 	if pr.cfg.TUI && pr.cfg.DryRun {
 		return Config{}, usageErr("--tui cannot be combined with --dry-run")
 	}
-	if pr.cfg.InPlace && pr.cfg.Input != "" {
-		if c, ok := pr.pl.Find(pipeline.KindContainer); ok {
-			containerExt := "." + string(c.(pipeline.Container).Format)
-			inputExt := strings.ToLower(filepath.Ext(pr.cfg.Input))
-			if !strings.EqualFold(containerExt, inputExt) {
-				return Config{}, usageErr("--in-place cannot change the container (input is %s)", inputExt)
-			}
-		}
-	}
+
+	// Whether --in-place can keep the input's own container is checked in
+	// the app package: Parse cannot tell a file input (whose extension
+	// matters) from a directory input (browsed via the picker, whose name
+	// just happens to have no extension of its own).
 
 	pr.cfg.Pipeline = pr.pl
 	return pr.cfg, nil

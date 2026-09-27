@@ -128,6 +128,42 @@ func TestTryRunRefusesSameAsInput(t *testing.T) {
 	}
 }
 
+func TestInPlaceContainerMismatchDoesNotRun(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "clip.mp4")
+	if err := os.WriteFile(in, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	fake := func(ctx context.Context, job runner.Job, onProgress func(runner.Progress)) (runner.Result, error) {
+		calls++
+		return runner.Result{}, nil
+	}
+	s := app.Session{Input: in, Info: testInfo(), InPlace: true, Force: true, Pipeline: pipeline.New(pipeline.Container{Format: pipeline.FormatMKV})}
+	m := New(s, WithRunner(fake))
+	m = resized(m, 100, 30)
+
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	if cmd != nil {
+		t.Fatal("r issued a run command despite the in-place container mismatch")
+	}
+	if m.run.phase != runError {
+		t.Fatalf("run.phase = %v, want runError", m.run.phase)
+	}
+	out := viewText(m)
+	if !strings.Contains(out, "in-place") {
+		t.Errorf("view missing the in-place container error, got:\n%s", out)
+	}
+
+	// The RunFunc must never have been invoked either (a real ffmpeg run
+	// would have raced the check, but there is nothing to race here since
+	// tryRun never starts one).
+	if calls != 0 {
+		t.Errorf("RunFunc called %d times, want 0", calls)
+	}
+}
+
 func TestOverwriteConfirmPrompt(t *testing.T) {
 	dir := t.TempDir()
 	outputPath := filepath.Join(dir, "out.mp4")

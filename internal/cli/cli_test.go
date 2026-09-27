@@ -279,18 +279,17 @@ func TestParseStretchWithoutBothSidesError(t *testing.T) {
 
 func TestParseUsageErrors(t *testing.T) {
 	cases := map[string][]string{
-		"unknown flag":              {"in.mov", "--bogus"},
-		"missing value":             {"in.mov", "--speed"},
-		"same flag twice":           {"in.mov", "--speed", "2", "--speed", "3"},
-		"scale with width":          {"in.mov", "--scale", "50%", "--width", "100"},
-		"width with scale":          {"in.mov", "--width", "100", "--scale", "50%"},
-		"crf with target-size":      {"in.mov", "--crf", "20", "--target-size", "20MB"},
-		"target-size with crf":      {"in.mov", "--target-size", "20MB", "--crf", "20"},
-		"o with in-place":           {"in.mov", "-o", "out.mp4", "--in-place"},
-		"tui with dry-run":          {"in.mov", "--tui", "--dry-run"},
-		"two positionals":           {"in.mov", "extra.mov"},
-		"invalid speed":             {"in.mov", "--speed", "bogus"},
-		"in-place container change": {"in.mov", "--in-place", "--container", "mkv"},
+		"unknown flag":         {"in.mov", "--bogus"},
+		"missing value":        {"in.mov", "--speed"},
+		"same flag twice":      {"in.mov", "--speed", "2", "--speed", "3"},
+		"scale with width":     {"in.mov", "--scale", "50%", "--width", "100"},
+		"width with scale":     {"in.mov", "--width", "100", "--scale", "50%"},
+		"crf with target-size": {"in.mov", "--crf", "20", "--target-size", "20MB"},
+		"target-size with crf": {"in.mov", "--target-size", "20MB", "--crf", "20"},
+		"o with in-place":      {"in.mov", "-o", "out.mp4", "--in-place"},
+		"tui with dry-run":     {"in.mov", "--tui", "--dry-run"},
+		"two positionals":      {"in.mov", "extra.mov"},
+		"invalid speed":        {"in.mov", "--speed", "bogus"},
 	}
 	for name, args := range cases {
 		if _, err := Parse(args); !errors.Is(err, ErrUsage) {
@@ -302,6 +301,23 @@ func TestParseUsageErrors(t *testing.T) {
 func TestParseInPlaceSameContainerOK(t *testing.T) {
 	_, err := Parse([]string{"in.mkv", "--in-place", "--container", "mkv"})
 	if err != nil {
+		t.Errorf("Parse: unexpected error %v", err)
+	}
+}
+
+// TestParseInPlaceContainerMismatchIsAppsJob documents that Parse itself no
+// longer rejects an --in-place container mismatch: it cannot tell a file
+// input (whose own extension matters) from a directory input (whose name
+// just happens to have no extension), so that check lives where the answer
+// is known, in the app package.
+func TestParseInPlaceContainerMismatchIsAppsJob(t *testing.T) {
+	if _, err := Parse([]string{"in.mov", "--in-place", "--container", "mkv"}); err != nil {
+		t.Errorf("Parse: unexpected error %v", err)
+	}
+}
+
+func TestParseInPlaceOnDirectoryLikeInputDoesNotError(t *testing.T) {
+	if _, err := Parse([]string{"/Users/me/Desktop", "--in-place", "--container", "mp4"}); err != nil {
 		t.Errorf("Parse: unexpected error %v", err)
 	}
 }

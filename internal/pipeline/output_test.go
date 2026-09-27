@@ -26,6 +26,20 @@ func TestDefaultOutputPathContainerStep(t *testing.T) {
 	}
 }
 
+func TestDefaultOutputPathUnsupportedExtensionFallsBackToMP4(t *testing.T) {
+	cases := map[string]string{
+		"/v/clip.gif": "/v/clip (edited).mp4",
+		"/v/clip.qt":  "/v/clip (edited).mp4",
+		"/v/clip.MOV": "/v/clip (edited).MOV",
+		"/v/clip.mkv": "/v/clip (edited).mkv",
+	}
+	for input, want := range cases {
+		if got := DefaultOutputPath(input, New()); got != want {
+			t.Errorf("DefaultOutputPath(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestQuoteCommand(t *testing.T) {
 	argv := []string{"ffmpeg", "-i", "a b.mov", "out.mp4", ""}
 	got := QuoteCommand(argv)

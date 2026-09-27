@@ -193,6 +193,52 @@ func TestMainSameAsInput(t *testing.T) {
 	}
 }
 
+func TestMainInPlaceUnsupportedExtensionErrors(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Name: "clip.gif", Width: 320, Height: 240, Seconds: 1})
+
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--speed", "2", "--in-place"})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "-o") || !strings.Contains(errOut.String(), "--container") {
+		t.Errorf("stderr = %q, want it to suggest -o or --container", errOut.String())
+	}
+	if _, err := os.Stat(in); err != nil {
+		t.Errorf("input should be untouched: %v", err)
+	}
+}
+
+func TestMainInPlaceContainerMismatchStillErrors(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--in-place", "--container", "mkv"})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "container") {
+		t.Errorf("stderr = %q, want it to mention the container mismatch", errOut.String())
+	}
+}
+
+func TestMainInPlaceOnGifWithSpeedProducesMP4(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Name: "clip.gif", Width: 320, Height: 240, Seconds: 1})
+
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--speed", "2"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0, stderr=%s", code, errOut.String())
+	}
+	wantOut := filepath.Join(filepath.Dir(in), "clip (edited).mp4")
+	if _, err := os.Stat(wantOut); err != nil {
+		t.Errorf("output not created at %q: %v", wantOut, err)
+	}
+}
+
 func TestMainInPlace(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Name: "clip at 1.02 PM.mp4", Width: 320, Height: 240, Seconds: 2})

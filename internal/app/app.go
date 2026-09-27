@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/cli"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
@@ -33,7 +34,38 @@ var (
 	// ErrOutputExists is returned when the output already exists and
 	// --force was not given.
 	ErrOutputExists = errors.New("output exists")
+	// ErrInPlaceContainerMismatch is returned when --in-place is combined
+	// with a Container step whose format differs from the input's own
+	// extension: in-place never changes the container.
+	ErrInPlaceContainerMismatch = errors.New("in-place cannot change the container")
+	// ErrInPlaceUnsupportedExt is returned when --in-place is used on an
+	// input whose extension is not one lazyff can write natively (and
+	// there is no Container step to pick one that matches).
+	ErrInPlaceUnsupportedExt = errors.New("in-place needs an explicit output; use -o or --container")
 )
+
+// CheckInPlace reports whether replacing input in place is safe for p: a
+// Container step's format must match input's own extension (in-place never
+// changes the container, it only ever writes back to input's own path),
+// and when there is no Container step, input's own extension must be one
+// the compiler can write without one. It is the single rule the headless
+// path, --dry-run and the TUI's run confirmation all enforce, so an
+// --in-place run never silently writes a different container over the
+// original file.
+func CheckInPlace(input string, p pipeline.Pipeline) error {
+	inputExt := strings.ToLower(filepath.Ext(input))
+	if c, ok := p.Find(pipeline.KindContainer); ok {
+		containerExt := "." + string(c.(pipeline.Container).Format)
+		if !strings.EqualFold(containerExt, inputExt) {
+			return fmt.Errorf("%w (input is %s)", ErrInPlaceContainerMismatch, inputExt)
+		}
+		return nil
+	}
+	if !pipeline.KnownContainerExt(inputExt) {
+		return fmt.Errorf("%w (input is %s)", ErrInPlaceUnsupportedExt, inputExt)
+	}
+	return nil
+}
 
 // Session describes one file (or directory, for the picker) the TUI or a
 // headless run operates on.
@@ -154,6 +186,12 @@ func (a App) Main(ctx context.Context, args []string) int {
 	outputPath := session.OutputPath(cfg.Pipeline)
 
 	if cfg.DryRun {
+		if cfg.InPlace {
+			if err := CheckInPlace(input, cfg.Pipeline); err != nil {
+				fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
+				return 1
+			}
+		}
 		if !cfg.InPlace && sameAsInput(input, outputPath) {
 			fmt.Fprintf(a.Stderr, "lazyff: %v\n", ErrSameAsInput)
 			return 1
@@ -169,6 +207,13 @@ func (a App) Main(ctx context.Context, args []string) int {
 
 	if !cfg.HasSteps || cfg.TUI {
 		return a.launchTUI(ctx, session)
+	}
+
+	if cfg.InPlace {
+		if err := CheckInPlace(input, cfg.Pipeline); err != nil {
+			fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
+			return 1
+		}
 	}
 
 	if !cfg.InPlace && sameAsInput(input, outputPath) {

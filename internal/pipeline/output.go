@@ -6,9 +6,27 @@ import (
 	"strings"
 )
 
+// knownOutputExts are the container extensions lazyff can write into
+// without an explicit Container step: DefaultOutputPath keeps the input's
+// own extension only when it is one of these (case-insensitive); any other
+// extension (including none at all) falls back to ".mp4", since ffmpeg
+// infers its output muxer from the extension and most of the world's video
+// extensions (.gif, .avi, .mkv-adjacent variants, ...) cannot hold an
+// libx264/aac encode.
+var knownOutputExts = map[string]bool{
+	".mp4": true, ".m4v": true, ".mov": true, ".mkv": true, ".webm": true,
+}
+
+// KnownContainerExt reports whether ext (with its leading dot, any case)
+// is one of the container extensions lazyff can write without an explicit
+// Container step: mp4, m4v, mov, mkv, webm.
+func KnownContainerExt(ext string) bool {
+	return knownOutputExts[strings.ToLower(ext)]
+}
+
 // DefaultOutputPath returns "<dir>/<stem> (edited).<ext>" for input, where
 // <ext> is the container step's extension when p has one, else the input's
-// own extension (".mp4" when the input has none).
+// own extension when it is a known container extension, else ".mp4".
 func DefaultOutputPath(input string, p Pipeline) string {
 	dir := filepath.Dir(input)
 	base := filepath.Base(input)
@@ -17,7 +35,7 @@ func DefaultOutputPath(input string, p Pipeline) string {
 
 	if c, ok := p.Find(KindContainer); ok {
 		ext = "." + string(c.(Container).Format)
-	} else if ext == "" {
+	} else if !KnownContainerExt(ext) {
 		ext = ".mp4"
 	}
 
