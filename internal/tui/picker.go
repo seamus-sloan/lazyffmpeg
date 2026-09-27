@@ -80,9 +80,10 @@ func (m Model) handlePickerListed(msg pickerListedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// pickerInitialCursor is the cursor row a fresh directory listing starts
-// on: the first real entry, skipping the ".." row, unless ".." is the
-// only row there is.
+// pickerInitialCursor is the cursor row the picker starts on whenever its
+// visible rows change (a fresh listing, or the filter being edited or
+// cleared): the first real entry, skipping the ".." row, unless ".." is
+// the only row there is.
 func (m Model) pickerInitialCursor() int {
 	if m.pickerHasParentRow() && len(m.pickerVisibleEntries()) > 0 {
 		return 1
@@ -211,7 +212,7 @@ func (m Model) handlePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.picker.filtering = false
 			m.picker.filter = ""
-			m.picker.cursor = 0
+			m.picker.cursor = m.pickerInitialCursor()
 			return m, nil
 		case "enter":
 			m.picker.filtering = false
@@ -220,7 +221,7 @@ func (m Model) handlePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if r := []rune(m.picker.filter); len(r) > 0 {
 				m.picker.filter = string(r[:len(r)-1])
 			}
-			m.picker.cursor = 0
+			m.picker.cursor = m.pickerInitialCursor()
 			return m, nil
 		case "ctrl+c":
 			m.quitting = true
@@ -234,7 +235,7 @@ func (m Model) handlePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Text != "" {
 			m.picker.filter += msg.Text
-			m.picker.cursor = 0
+			m.picker.cursor = m.pickerInitialCursor()
 			return m, nil
 		}
 		return m, nil

@@ -331,6 +331,70 @@ func TestPickerFilterEnterAccepts(t *testing.T) {
 	}
 }
 
+// filteringPicker is a picker listing fakeEntries in /dir, with its
+// filter open and text typed into it.
+func filteringPicker(t *testing.T, text string) Model {
+	t.Helper()
+	m := New(pickerSession(), WithProber(func(ctx context.Context, path string) (probe.Info, error) {
+		return probe.Info{}, nil
+	}))
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: fakeEntries()})
+	m = resized(mm.(Model), 100, 30)
+	for _, k := range append([]string{"/"}, strings.Split(text, "")...) {
+		mm, _ = m.Update(key(k))
+		m = mm.(Model)
+	}
+	return m
+}
+
+func TestPickerFilterThenEnterTwiceOpensTheMatch(t *testing.T) {
+	m := filteringPicker(t, "clip-a")
+	for _, k := range []string{"enter", "enter"} {
+		mm, _ := m.Update(key(k))
+		m = mm.(Model)
+	}
+	if m.picker.dir != "/dir" || m.picker.probingPath != "/dir/clip-a.mp4" {
+		t.Fatalf("filter clip-a, enter, enter: dir=%q probingPath=%q, want /dir/clip-a.mp4 probed", m.picker.dir, m.picker.probingPath)
+	}
+}
+
+func TestPickerFilterEditsPutTheCursorOnTheFirstMatch(t *testing.T) {
+	m := filteringPicker(t, "clip-a")
+	if m.picker.cursor != 1 {
+		t.Errorf("cursor after typing a filter = %d, want 1 (the first match, past \"..\")", m.picker.cursor)
+	}
+
+	mm, _ := m.Update(key("backspace"))
+	m = mm.(Model)
+	if m.picker.cursor != 1 {
+		t.Errorf("cursor after backspace = %d, want 1", m.picker.cursor)
+	}
+
+	mm, _ = m.Update(key("esc"))
+	m = mm.(Model)
+	if m.picker.cursor != 1 {
+		t.Errorf("cursor after esc clears the filter = %d, want 1", m.picker.cursor)
+	}
+}
+
+func TestPickerFilterWithNoMatchesPutsTheCursorOnParent(t *testing.T) {
+	m := filteringPicker(t, "zzz")
+	if m.picker.cursor != 0 {
+		t.Errorf("cursor with nothing matching = %d, want 0 (\"..\" is the only row)", m.picker.cursor)
+	}
+}
+
+func TestPickerAcceptingTheFilterKeepsTheCursor(t *testing.T) {
+	m := filteringPicker(t, "clip")
+	mm, _ := m.Update(key("down"))
+	m = mm.(Model)
+	mm, _ = m.Update(key("enter"))
+	m = mm.(Model)
+	if m.picker.cursor != 2 {
+		t.Errorf("cursor after moving down and accepting the filter = %d, want 2", m.picker.cursor)
+	}
+}
+
 func TestPickerEnterOnFileProbesAsynchronously(t *testing.T) {
 	wantInfo := probe.Info{Duration: 5, Video: probe.VideoStream{Width: 10, Height: 10, Codec: "h264"}}
 	m := New(pickerSession(), WithProber(func(ctx context.Context, path string) (probe.Info, error) {
