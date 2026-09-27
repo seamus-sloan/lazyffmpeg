@@ -44,6 +44,10 @@ type runState struct {
 	phase runPhase
 
 	job runner.Job
+	// inputSize is the input's size when the run started: the done
+	// screen's "before" size, which must survive the reprobe that follows
+	// an --in-place run replacing session.Info.
+	inputSize int64
 
 	progress runner.Progress
 	result   runner.Result
@@ -88,13 +92,16 @@ func (m Model) reprobeCmd() tea.Cmd {
 }
 
 // handleRunReprobed applies a successful re-probe's fresh Info to the
-// session; a failed re-probe leaves the (now stale, but still usable)
-// existing Info in place.
+// session and re-renders the preview from the rewritten file, with its
+// position clamped into the file's new length; a failed re-probe leaves
+// the (now stale, but still usable) existing Info in place.
 func (m Model) handleRunReprobed(msg runReprobedMsg) (tea.Model, tea.Cmd) {
-	if msg.err == nil {
-		m.session.Info = msg.info
+	if msg.err != nil {
+		return m, nil
 	}
-	return m, nil
+	m.session.Info = msg.info
+	m = m.clampPreviewTime()
+	return m.requestRender()
 }
 
 func fileExists(path string) bool {
@@ -143,7 +150,7 @@ func (m Model) startRun(job runner.Job) (Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(m.ctx)
 	ch := make(chan tea.Msg, 16)
 
-	m.run = runState{phase: runRunning, job: job, cancel: cancel, msgs: ch}
+	m.run = runState{phase: runRunning, job: job, inputSize: m.session.Info.SizeBytes, cancel: cancel, msgs: ch}
 	if m.preview.playing {
 		m.preview.playing = false
 		m.preview.playGen++ // invalidate any tick still ticking down from before the run
@@ -334,7 +341,7 @@ func (m Model) runBodyLines() []string {
 		}
 		return []string{
 			fmt.Sprintf("Wrote %s", rs.result.Output),
-			units.FormatSizeChange(m.session.Info.SizeBytes, rs.result.Size),
+			units.FormatSizeChange(rs.inputSize, rs.result.Size),
 			"",
 			"press any key to continue",
 		}

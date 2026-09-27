@@ -389,6 +389,89 @@ func TestSuccessfulInPlaceRunReprobesInputAndClearsUndo(t *testing.T) {
 	}
 }
 
+// runInPlaceToReprobe runs m's pipeline in place through a fake runner
+// that shrinks the file to 100 MB and a prober that reports the new file
+// as 16.5 s long, settling the run and the reprobe that follows it. It
+// returns the model and the command the reprobe's result produced.
+func runInPlaceToReprobe(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	mm, cmd = m.Update(cmd())
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("no reprobe command issued after a successful in-place run")
+	}
+	mm, cmd = m.Update(cmd())
+	return mm.(Model), cmd
+}
+
+func inPlaceSession(t *testing.T) app.Session {
+	t.Helper()
+	in := filepath.Join(t.TempDir(), "clip.mov")
+	if err := os.WriteFile(in, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return app.Session{Input: in, Info: testInfo(), InPlace: true, Force: true}
+}
+
+func inPlaceFakes() []Option {
+	run := func(ctx context.Context, job runner.Job, on func(runner.Progress)) (runner.Result, error) {
+		return runner.Result{Output: job.Output, Size: 100_000_000}, nil
+	}
+	prober := func(ctx context.Context, path string) (probe.Info, error) {
+		return probe.Info{Duration: 16.5, SizeBytes: 100_000_000, Video: probe.VideoStream{FPS: 30}}, nil
+	}
+	return []Option{WithRunner(run), WithProber(prober)}
+}
+
+func TestInPlaceDoneViewKeepsTheBeforeSizeAfterTheReprobe(t *testing.T) {
+	m := resized(New(inPlaceSession(t), inPlaceFakes()...), 100, 30)
+
+	m, _ = runInPlaceToReprobe(t, m)
+
+	if m.session.Info.SizeBytes != 100_000_000 {
+		t.Fatalf("setup: reprobe did not land, session size = %d", m.session.Info.SizeBytes)
+	}
+	if out := viewText(m); !strings.Contains(out, "276.1 MB → 100.0 MB") {
+		t.Errorf("done screen lost the before size once the reprobe landed:\n%s", out)
+	}
+}
+
+func TestInPlaceReprobeReRendersThePreview(t *testing.T) {
+	fn, reqs := fakeRenderer("F", nil)
+	s := inPlaceSession(t)
+	opts := append(inPlaceFakes(), WithRenderer(fn, true))
+	m := step(t, New(s, opts...), tea.WindowSizeMsg{Width: 100, Height: 30})
+	before := len(*reqs)
+
+	m, cmd := runInPlaceToReprobe(t, m)
+	if cmd == nil {
+		t.Fatal("the reprobe issued no render for the rewritten file")
+	}
+	m = step(t, m, cmd())
+
+	if len(*reqs) != before+1 {
+		t.Fatalf("renders after the reprobe = %d, want %d", len(*reqs), before+1)
+	}
+	if got := (*reqs)[len(*reqs)-1].Input; got != s.Input {
+		t.Errorf("re-render was for %q, want the rewritten input %q", got, s.Input)
+	}
+}
+
+func TestInPlaceReprobeClampsThePreviewPositionIntoTheNewDuration(t *testing.T) {
+	fn, _ := fakeRenderer("F", nil)
+	opts := append(inPlaceFakes(), WithRenderer(fn, true))
+	m := step(t, New(inPlaceSession(t), opts...), tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.preview.time = 30
+
+	m, _ = runInPlaceToReprobe(t, m)
+
+	if m.preview.time != 16.5 {
+		t.Errorf("position after the file shrank to 16.5s = %vs, want 16.5s", m.preview.time)
+	}
+}
+
 func TestRunFrameTruncatesLongLinesToTerminalWidth(t *testing.T) {
 	dir := t.TempDir()
 	longOutput := filepath.Join(dir, strings.Repeat("x", 300)+".mp4")
