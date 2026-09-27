@@ -113,7 +113,7 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 		videoArgs = append(videoArgs, "-tag:v", "hvc1")
 	}
 
-	argv := []string{"ffmpeg", "-hide_banner", "-nostdin", "-i", opt.Input, "-map", "0:v:0"}
+	argv := []string{"ffmpeg", "-hide_banner", "-nostdin", "-i", opt.Input, "-map", "0:V:0"}
 	if mapAudio {
 		argv = append(argv, "-map", "0:a:0")
 	}

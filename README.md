@@ -128,7 +128,7 @@ Every run is **one** ffmpeg invocation, built from:
 
 ```
 ffmpeg -hide_banner -nostdin -i <input>
-  -map 0:v:0 [-map 0:a:0]
+  -map 0:V:0 [-map 0:a:0]
   [-vf <chain>] [-af <chain>]
   <video args> <audio args>
   [-movflags +faststart] [-f <muxer>] [raw args...]

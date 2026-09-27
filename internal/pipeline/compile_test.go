@@ -36,11 +36,25 @@ func TestCompileEmptyPipeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
-	want := "ffmpeg -hide_banner -nostdin -i IN -map 0:v:0 -map 0:a:0 " +
+	want := "ffmpeg -hide_banner -nostdin -i IN -map 0:V:0 -map 0:a:0 " +
 		"-c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p " +
 		"-c:a copy -movflags +faststart OUT.mp4"
 	if got := strings.Join(argv, " "); got != want {
 		t.Errorf("Compile argv = %q, want %q", got, want)
+	}
+}
+
+func TestCompileMapsVideoStreamExcludingAttachedPictures(t *testing.T) {
+	argv, err := Compile(infoAAC(10), New(), Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-map 0:V:0") {
+		t.Errorf("argv should map the video stream with capital V (excludes attached-picture streams): %v", argv)
+	}
+	if strings.Contains(joined, "-map 0:v:0") {
+		t.Errorf("argv should not use lowercase v (includes attached pictures): %v", argv)
 	}
 }
 
