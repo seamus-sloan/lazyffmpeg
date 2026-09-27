@@ -118,6 +118,26 @@ func TestResolutionVideoFilter(t *testing.T) {
 	}
 }
 
+func TestResolutionNormalize(t *testing.T) {
+	cases := []struct {
+		r, want Resolution
+	}{
+		{Resolution{Width: 853}, Resolution{Width: 852}},
+		{Resolution{Height: 481}, Resolution{Height: 480}},
+		{Resolution{Width: 3}, Resolution{Width: 2}},
+		{Resolution{Width: 1280}, Resolution{Width: 1280}},
+		{Resolution{Width: 1921, Height: 1081, Exact: true}, Resolution{Width: 1920, Height: 1080, Exact: true}},
+		// A fit box is a bound, not the output size: its sides stay as given.
+		{Resolution{Width: 1921, Height: 1081}, Resolution{Width: 1921, Height: 1081}},
+		{Resolution{Percent: 33}, Resolution{Percent: 33}},
+	}
+	for _, c := range cases {
+		if got := c.r.Normalize(); got != c.want {
+			t.Errorf("Normalize(%+v) = %+v, want %+v", c.r, got, c.want)
+		}
+	}
+}
+
 func TestResolutionSummary(t *testing.T) {
 	cases := []struct {
 		r    Resolution
@@ -128,6 +148,10 @@ func TestResolutionSummary(t *testing.T) {
 		{Resolution{Width: 1280}, "1280×auto"},
 		{Resolution{Height: 720}, "auto×720"},
 		{Resolution{Percent: 50}, "50%"},
+		{Resolution{Width: 853}, "852×auto"},
+		{Resolution{Height: 481}, "auto×480"},
+		{Resolution{Width: 1921, Height: 1081, Exact: true}, "1920×1080 (stretch)"},
+		{Resolution{Width: 1921, Height: 1081}, "fit 1921×1081"},
 	}
 	for _, c := range cases {
 		if got := c.r.Summary(); got != c.want {

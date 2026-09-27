@@ -103,23 +103,21 @@ func OutputDimensions(info probe.Info, p Pipeline) (w, h int) {
 	if !ok {
 		return iw, ih
 	}
-	res := r.(Resolution)
+	res := r.(Resolution).Normalize()
 	switch {
 	case res.Percent > 0:
 		frac := res.Percent / 100
 		return evenFloor(float64(iw) * frac), evenFloor(float64(ih) * frac)
 	case res.Width > 0 && res.Height > 0:
 		if res.Exact {
-			return evenDown(res.Width), evenDown(res.Height)
+			return res.Width, res.Height
 		}
 		scale := math.Min(float64(res.Width)/float64(iw), float64(res.Height)/float64(ih))
 		return evenRound(float64(iw) * scale), evenRound(float64(ih) * scale)
 	case res.Width > 0:
-		w := evenDown(res.Width)
-		return w, evenRound(float64(ih) * float64(w) / float64(iw))
+		return res.Width, evenRound(float64(ih) * float64(res.Width) / float64(iw))
 	case res.Height > 0:
-		h := evenDown(res.Height)
-		return evenRound(float64(iw) * float64(h) / float64(ih)), h
+		return evenRound(float64(iw) * float64(res.Height) / float64(ih)), res.Height
 	}
 	return iw, ih
 }

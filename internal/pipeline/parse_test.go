@@ -17,6 +17,10 @@ func TestParseResolution(t *testing.T) {
 		{"x720", Resolution{Height: 720}},
 		{"50%", Resolution{Percent: 50}},
 		{"1920x1080!", Resolution{Width: 1920, Height: 1080, Exact: true}},
+		{"853x", Resolution{Width: 852}},
+		{"x481", Resolution{Height: 480}},
+		{"1921x1081!", Resolution{Width: 1920, Height: 1080, Exact: true}},
+		{"1921x1081", Resolution{Width: 1921, Height: 1081}},
 	}
 	for _, c := range cases {
 		got, err := ParseResolution(c.in)

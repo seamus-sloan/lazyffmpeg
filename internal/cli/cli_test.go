@@ -90,6 +90,28 @@ func TestParseTrimStartEndMerge(t *testing.T) {
 	}
 }
 
+func TestParseOddResolutionSidesAreNormalisedToTheEvenSizeUsed(t *testing.T) {
+	cases := []struct {
+		args []string
+		want pipeline.Resolution
+	}{
+		{[]string{"in.mov", "--width", "161"}, pipeline.Resolution{Width: 160}},
+		{[]string{"in.mov", "--height", "121"}, pipeline.Resolution{Height: 120}},
+		{[]string{"in.mov", "--width", "161", "--height", "121"}, pipeline.Resolution{Width: 161, Height: 121}},
+		{[]string{"in.mov", "--width", "161", "--height", "121", "--stretch"}, pipeline.Resolution{Width: 160, Height: 120, Exact: true}},
+	}
+	for _, c := range cases {
+		cfg, err := Parse(c.args)
+		if err != nil {
+			t.Errorf("Parse(%q): %v", c.args, err)
+			continue
+		}
+		if got := mustFind(t, cfg.Pipeline, pipeline.KindResolution).(pipeline.Resolution); got != c.want {
+			t.Errorf("Parse(%q) Resolution = %+v, want %+v", c.args, got, c.want)
+		}
+	}
+}
+
 func TestParseTrimZeroStartWithEndInEitherOrder(t *testing.T) {
 	orders := [][]string{
 		{"in.mov", "--trim-start", "0", "--trim-end", "20"},

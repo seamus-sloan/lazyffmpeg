@@ -118,7 +118,23 @@ func (r Resolution) Validate() error {
 	return nil
 }
 
+// Normalize returns r with the sides the compiled filter actually uses: a
+// single side, or both sides of an exact (stretched) size, rounded down to
+// even, since yuv420p encoders such as libx264 reject odd dimensions (and
+// ffmpeg's -2 keeps the other side even). A fit box is only a bound, the
+// fitted output is kept even inside it, so its sides stay as given; so
+// does a percent. Summary, VideoFilter and OutputDimensions all work from
+// the normalized value, and ParseResolution returns it.
+func (r Resolution) Normalize() Resolution {
+	if r.Percent > 0 || (r.Width > 0 && r.Height > 0 && !r.Exact) {
+		return r
+	}
+	r.Width, r.Height = evenDown(r.Width), evenDown(r.Height)
+	return r
+}
+
 func (r Resolution) Summary() string {
+	r = r.Normalize()
 	switch {
 	case r.Percent > 0:
 		return units.FormatNumber(r.Percent) + "%"
@@ -136,28 +152,27 @@ func (r Resolution) Summary() string {
 }
 
 func (r Resolution) VideoFilter() string {
+	r = r.Normalize()
 	switch {
 	case r.Percent > 0:
 		frac := units.FormatNumber(r.Percent / 100)
 		return fmt.Sprintf("scale=trunc(iw*%s/2)*2:-2", frac)
 	case r.Width > 0 && r.Height > 0:
 		if r.Exact {
-			return fmt.Sprintf("scale=%d:%d", evenDown(r.Width), evenDown(r.Height))
+			return fmt.Sprintf("scale=%d:%d", r.Width, r.Height)
 		}
 		return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:force_divisible_by=2", r.Width, r.Height)
 	case r.Width > 0:
-		return fmt.Sprintf("scale=%d:-2", evenDown(r.Width))
+		return fmt.Sprintf("scale=%d:-2", r.Width)
 	case r.Height > 0:
-		return fmt.Sprintf("scale=-2:%d", evenDown(r.Height))
+		return fmt.Sprintf("scale=-2:%d", r.Height)
 	}
 	return ""
 }
 
 func (Resolution) AudioFilter() string { return "" }
 
-// evenDown rounds n down to an even number: yuv420p encoders such as
-// libx264 reject odd frame dimensions, and ffmpeg's -2 already keeps the
-// other side even.
+// evenDown rounds n down to an even number (see Resolution.Normalize).
 func evenDown(n int) int {
 	return n - n%2
 }

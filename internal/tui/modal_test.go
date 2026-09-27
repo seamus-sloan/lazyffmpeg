@@ -179,6 +179,22 @@ func TestModalCustomValidUpsertsAndCloses(t *testing.T) {
 	}
 }
 
+func TestModalCustomOddWidthShowsTheEvenWidthUsed(t *testing.T) {
+	m := resized(New(testSession(pipeline.New())), 100, 30)
+	m = openMenu(t, m, pipeline.KindResolution)
+	for i := 0; i < 6; i++ {
+		mm, _ := m.Update(key("down"))
+		m = mm.(Model)
+	}
+	m = typeText(m, "853x")
+	mm, _ := m.Update(key("enter"))
+	m = mm.(Model)
+
+	if out := viewText(m); !strings.Contains(out, "1. Resolution   852×auto") {
+		t.Errorf("PIPELINE does not show the even width the encode uses:\n%s", out)
+	}
+}
+
 func TestModalCustomInvalidShowsErrorKeepsPipeline(t *testing.T) {
 	pl := pipeline.New(pipeline.FrameRate{FPS: 30})
 	m := New(testSession(pl))

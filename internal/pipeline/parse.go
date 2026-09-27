@@ -10,7 +10,8 @@ import (
 )
 
 // ParseResolution parses "WxH" ("x", "X" or "×" as the separator, optional
-// trailing "!" for Exact/stretch), "Wx", "xH" or "P%".
+// trailing "!" for Exact/stretch), "Wx", "xH" or "P%", returning the
+// normalized step (see Resolution.Normalize), so "853x" is 852 wide.
 func ParseResolution(s string) (Resolution, error) {
 	trimmed := strings.TrimSpace(s)
 	if strings.HasSuffix(trimmed, "%") {
@@ -54,7 +55,7 @@ func ParseResolution(s string) (Resolution, error) {
 	if err := r.Validate(); err != nil {
 		return Resolution{}, err
 	}
-	return r, nil
+	return r.Normalize(), nil
 }
 
 // ParseSpeed parses a bare number or a number with a trailing "x"/"X".

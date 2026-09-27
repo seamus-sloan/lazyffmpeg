@@ -184,6 +184,12 @@ func Parse(args []string) (Config, error) {
 		pr.res.Exact = true
 		pr.pl = pr.pl.Upsert(pr.res)
 	}
+	if pr.hasSides {
+		// Only now is it known whether --width/--height is a single side
+		// or a box: store the sides the encode will actually use.
+		pr.res = pr.res.Normalize()
+		pr.pl = pr.pl.Upsert(pr.res)
+	}
 
 	if pr.seen["-o"] && pr.cfg.InPlace {
 		return Config{}, usageErr("-o cannot be combined with --in-place")
