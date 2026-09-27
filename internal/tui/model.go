@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
+	"github.com/seamus-sloan/lazyffmpeg/internal/picker"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/preview"
 	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
@@ -127,7 +128,7 @@ func New(s app.Session, opts ...Option) Model {
 		ctx:      context.Background(),
 		session:  s,
 		pipeline: s.Pipeline,
-		listFn:   defaultList,
+		listFn:   picker.List,
 		probeFn:  probe.Run,
 		runFn:    runner.Run,
 

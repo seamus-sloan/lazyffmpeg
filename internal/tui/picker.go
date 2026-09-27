@@ -18,10 +18,6 @@ type ListFunc func(dir string) ([]picker.Entry, error)
 // ProbeFunc probes a chosen file for the file picker.
 type ProbeFunc func(ctx context.Context, path string) (probe.Info, error)
 
-func defaultList(dir string) ([]picker.Entry, error) {
-	return picker.List(dir)
-}
-
 // pickerState is the file picker's state, active while Model.mode ==
 // modePicker.
 type pickerState struct {
@@ -32,8 +28,9 @@ type pickerState struct {
 	filtering bool
 	filter    string
 
-	status  string
-	probing bool
+	status      string
+	probing     bool
+	probingPath string // the file a pending probe was started for
 }
 
 // pickerListedMsg reports the result of an async directory listing.
@@ -94,6 +91,12 @@ func (m Model) pickerInitialCursor() int {
 }
 
 func (m Model) handlePickerProbed(msg pickerProbedMsg) (tea.Model, tea.Cmd) {
+	if m.mode != modePicker {
+		return m, nil // stale: the editor has since moved on to another file
+	}
+	if m.picker.probing && msg.path != m.picker.probingPath {
+		return m, nil // stale: superseded by a newer probe request
+	}
 	m.picker.probing = false
 	if msg.err != nil {
 		m.picker.status = msg.err.Error()
@@ -181,6 +184,9 @@ func (m Model) pickerOpenDir(dir string) (Model, tea.Cmd) {
 }
 
 func (m Model) pickerActivate() (Model, tea.Cmd) {
+	if m.picker.probing {
+		return m, nil // a probe is already pending; ignore another enter
+	}
 	entries := m.pickerVisibleEntries()
 	idx := m.picker.cursor
 	if m.pickerHasParentRow() {
@@ -198,6 +204,7 @@ func (m Model) pickerActivate() (Model, tea.Cmd) {
 	}
 	m.picker.status = ""
 	m.picker.probing = true
+	m.picker.probingPath = e.Path
 	return m, m.probeCmd(e.Path)
 }
 

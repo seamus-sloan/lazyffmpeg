@@ -371,7 +371,16 @@ func TestPickerProbeFailureStaysOnPicker(t *testing.T) {
 	m = mm.(Model)
 	m = resized(m, 100, 30)
 
-	mm, _ = m.Update(pickerProbedMsg{path: "/dir/clip-a.mp4", err: wantErr})
+	// Row order: .. , sub, clip-b.mp4, clip-a.mp4 -> clip-a.mp4 is row 3.
+	for i := 0; i < 3; i++ {
+		mm, _ = m.Update(key("j"))
+		m = mm.(Model)
+	}
+	mm, cmd := m.Update(key("enter"))
+	m = mm.(Model)
+	msg := cmd()
+
+	mm, _ = m.Update(msg)
 	m = mm.(Model)
 	if m.mode != modePicker {
 		t.Fatalf("mode after a failed probe = %v, want modePicker", m.mode)
@@ -379,6 +388,88 @@ func TestPickerProbeFailureStaysOnPicker(t *testing.T) {
 	out := ansi.Strip(m.View().Content)
 	if !strings.Contains(out, "ffprobe: boom") {
 		t.Errorf("missing probe error on picker status line, got:\n%s", out)
+	}
+}
+
+func TestPickerIgnoresEnterWhileProbing(t *testing.T) {
+	m := New(pickerSession(), WithProber(func(ctx context.Context, path string) (probe.Info, error) {
+		return probe.Info{Duration: 5}, nil
+	}))
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: fakeEntries()})
+	m = mm.(Model)
+	m = resized(m, 100, 30)
+
+	// Start probing clip-a.mp4 (row 3).
+	for i := 0; i < 3; i++ {
+		mm, _ = m.Update(key("j"))
+		m = mm.(Model)
+	}
+	mm, cmd := m.Update(key("enter"))
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("enter on a file issued no command")
+	}
+	if !m.picker.probing {
+		t.Fatal("picker.probing was not set")
+	}
+
+	// A second enter while the first probe is still pending must not
+	// start a second probe.
+	mm, cmd2 := m.Update(key("enter"))
+	m = mm.(Model)
+	if cmd2 != nil {
+		t.Error("enter while probing issued another probe command")
+	}
+
+	// The pending probe still completes normally.
+	mm, _ = m.Update(cmd())
+	m = mm.(Model)
+	if m.mode != modeMain {
+		t.Fatalf("mode after the pending probe completed = %v, want modeMain", m.mode)
+	}
+}
+
+func TestPickerIgnoresStaleProbeForADifferentPath(t *testing.T) {
+	m := New(pickerSession(), WithProber(func(ctx context.Context, path string) (probe.Info, error) {
+		return probe.Info{Duration: 5}, nil
+	}))
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: fakeEntries()})
+	m = mm.(Model)
+	m = resized(m, 100, 30)
+
+	// Start probing clip-a.mp4 (row 3), then feed a stale result for a
+	// different path: it must be ignored, leaving the pending probe (and
+	// picker mode) untouched.
+	for i := 0; i < 3; i++ {
+		mm, _ = m.Update(key("j"))
+		m = mm.(Model)
+	}
+	mm, _ = m.Update(key("enter"))
+	m = mm.(Model)
+
+	mm, _ = m.Update(pickerProbedMsg{path: "/dir/clip-b.mp4", info: probe.Info{Duration: 9}})
+	m = mm.(Model)
+	if m.mode != modePicker {
+		t.Fatalf("mode after a stale probe = %v, want modePicker", m.mode)
+	}
+	if !m.picker.probing {
+		t.Error("a stale probe result cleared the pending probe")
+	}
+}
+
+func TestPickerLateProbeAfterSwitchingToMainDoesNotOverwriteSession(t *testing.T) {
+	m := New(pickerSession())
+	m = resized(m, 100, 30)
+
+	mm, _ := m.Update(pickerProbedMsg{path: "/dir/clip-b.mp4", info: probe.Info{Duration: 5}})
+	m = mm.(Model)
+	m.undo = []pipeline.Pipeline{pipeline.New()}
+
+	mm, _ = m.Update(pickerProbedMsg{path: "/dir/clip-a.mp4", info: probe.Info{Duration: 9}})
+	m = mm.(Model)
+	if m.session.Input != "/dir/clip-b.mp4" || len(m.undo) != 1 {
+		t.Fatalf("a late probe for a different file switched the editor to %s, undo depth %d",
+			m.session.Input, len(m.undo))
 	}
 }
 
