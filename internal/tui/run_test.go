@@ -55,10 +55,18 @@ func TestStartingARunStopsPlaybackAndIgnoresPreviewTicks(t *testing.T) {
 		t.Error("starting a run did not stop preview playback")
 	}
 
-	mm, _ = m.Update(previewTickMsg{})
+	// Force playback back on and send a tick from the current play
+	// session, so the only thing left to drop it is the run itself.
+	m.preview.playing = true
+	before := m.preview.time
+	mm, cmd := m.Update(previewTickMsg{gen: m.preview.playGen})
 	m = mm.(Model)
-	if m.run.phase == runRunning && m.preview.pendingSeq != 0 {
-		t.Error("a preview tick started a frame decode during the run")
+	if m.run.phase != runRunning {
+		t.Fatalf("run.phase = %v, want runRunning", m.run.phase)
+	}
+	if cmd != nil || m.preview.pendingSeq != 0 || m.preview.time != before {
+		t.Errorf("a preview tick during the run was acted on: cmd=%v pendingSeq=%d time %v -> %v",
+			cmd != nil, m.preview.pendingSeq, before, m.preview.time)
 	}
 }
 
