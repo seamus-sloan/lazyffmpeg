@@ -332,15 +332,9 @@ func (m Model) runBodyLines() []string {
 		if rs.canceled {
 			return []string{"Canceled", "", "press any key to continue"}
 		}
-		before := units.FormatSize(m.session.Info.SizeBytes)
-		after := units.FormatSize(rs.result.Size)
-		var pct float64
-		if m.session.Info.SizeBytes > 0 {
-			pct = (float64(rs.result.Size) - float64(m.session.Info.SizeBytes)) / float64(m.session.Info.SizeBytes) * 100
-		}
 		return []string{
 			fmt.Sprintf("Wrote %s", rs.result.Output),
-			fmt.Sprintf("%s → %s (%+.0f%%)", before, after, pct),
+			units.FormatSizeChange(m.session.Info.SizeBytes, rs.result.Size),
 			"",
 			"press any key to continue",
 		}

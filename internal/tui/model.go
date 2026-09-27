@@ -106,13 +106,6 @@ func WithProber(fn ProbeFunc) Option {
 	return func(m *Model) { m.probeFn = fn }
 }
 
-// withContext threads the outer run context through to async commands. It
-// is unexported: only Run sets it, tests use the zero value's background
-// context.
-func withContext(ctx context.Context) Option {
-	return func(m *Model) { m.ctx = ctx }
-}
-
 // withRunWaitGroup gives startRun a WaitGroup to register its background
 // goroutine with. It is unexported: only Run sets it, so it can wait
 // (bounded) for an in-flight run's cleanup after its own program loop
@@ -403,7 +396,8 @@ const runWaitTimeout = 5 * time.Second
 // before returning.
 func Run(ctx context.Context, s app.Session) error {
 	var wg sync.WaitGroup
-	m := New(s, withContext(ctx), withRunWaitGroup(&wg))
+	m := New(s, withRunWaitGroup(&wg))
+	m.ctx = ctx
 	p := tea.NewProgram(m, tea.WithContext(ctx))
 	_, err := p.Run()
 	waitForRuns(&wg, runWaitTimeout)

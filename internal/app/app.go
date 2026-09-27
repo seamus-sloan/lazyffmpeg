@@ -192,7 +192,7 @@ func (a App) Main(ctx context.Context, args []string) int {
 				return 1
 			}
 		}
-		if !cfg.InPlace && sameAsInput(input, outputPath) {
+		if !cfg.InPlace && SameAsInput(input, outputPath) {
 			fmt.Fprintf(a.Stderr, "lazyff: %v\n", ErrSameAsInput)
 			return 1
 		}
@@ -216,14 +216,15 @@ func (a App) Main(ctx context.Context, args []string) int {
 		}
 	}
 
-	if !cfg.InPlace && sameAsInput(input, outputPath) {
+	if !cfg.InPlace && SameAsInput(input, outputPath) {
 		fmt.Fprintf(a.Stderr, "lazyff: %v\n", ErrSameAsInput)
 		return 1
 	}
 
 	if !cfg.InPlace && !cfg.Force {
 		if _, statErr := os.Stat(outputPath); statErr == nil {
-			fmt.Fprintf(a.Stderr, "lazyff: output exists: %s (use --force to overwrite)\n", outputPath)
+			err := fmt.Errorf("%w: %s (use --force to overwrite)", ErrOutputExists, outputPath)
+			fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
 			return 1
 		}
 	}
@@ -274,13 +275,7 @@ func (a App) Main(ctx context.Context, args []string) int {
 	}
 
 	fmt.Fprintln(a.Stdout, result.Output)
-	before := units.FormatSize(info.SizeBytes)
-	after := units.FormatSize(result.Size)
-	var pct float64
-	if info.SizeBytes > 0 {
-		pct = (float64(result.Size) - float64(info.SizeBytes)) / float64(info.SizeBytes) * 100
-	}
-	fmt.Fprintf(a.Stdout, "%s → %s (%+.0f%%)\n", before, after, pct)
+	fmt.Fprintln(a.Stdout, units.FormatSizeChange(info.SizeBytes, result.Size))
 
 	return 0
 }
@@ -312,10 +307,6 @@ func versionString() string {
 // run path uses this to apply the same output-safety rule as the headless
 // path (see ErrSameAsInput).
 func SameAsInput(input, output string) bool {
-	return sameAsInput(input, output)
-}
-
-func sameAsInput(input, output string) bool {
 	absIn, err1 := filepath.Abs(input)
 	absOut, err2 := filepath.Abs(output)
 	if err1 == nil && err2 == nil && filepath.Clean(absIn) == filepath.Clean(absOut) {

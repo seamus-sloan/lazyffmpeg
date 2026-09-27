@@ -126,6 +126,22 @@ func TestFormatSize(t *testing.T) {
 	}
 }
 
+func TestFormatSizeChange(t *testing.T) {
+	cases := []struct {
+		before, after int64
+		want          string
+	}{
+		{276_100_000, 200_000_000, "276.1 MB → 200.0 MB (-28%)"},
+		{100, 150, "100 B → 150 B (+50%)"},
+		{0, 512, "0 B → 512 B (+0%)"},
+	}
+	for _, c := range cases {
+		if got := FormatSizeChange(c.before, c.after); got != c.want {
+			t.Errorf("FormatSizeChange(%v,%v) = %q, want %q", c.before, c.after, got, c.want)
+		}
+	}
+}
+
 func TestParseBitrateK(t *testing.T) {
 	cases := []struct {
 		in   string

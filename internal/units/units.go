@@ -150,6 +150,17 @@ func FormatSize(n int64) string {
 	}
 }
 
+// FormatSizeChange renders "<before> → <after> (<±N>%)", the before/after
+// summary line the headless run and the TUI's run-completion view both
+// show. The percent change is 0 when before is not positive.
+func FormatSizeChange(before, after int64) string {
+	var pct float64
+	if before > 0 {
+		pct = (float64(after) - float64(before)) / float64(before) * 100
+	}
+	return fmt.Sprintf("%s → %s (%+.0f%%)", FormatSize(before), FormatSize(after), pct)
+}
+
 var bitrateRe = regexp.MustCompile(`(?i)^(\d+)k$`)
 
 // ParseBitrateK parses an audio bitrate given as "<n>k", 32 <= n <= 512.
