@@ -1,0 +1,22 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "mp3",
+      "codec_type": "audio",
+      "sample_rate": "44100",
+      "channels": 2,
+      "bit_rate": "192000",
+      "duration": "180.000000",
+      "disposition": { "default": 1, "attached_pic": 0 }
+    }
+  ],
+  "format": {
+    "filename": "audio_only.mp3",
+    "nb_streams": 1,
+    "format_name": "mp3",
+    "duration": "180.000000",
+    "size": "4320000",
+    "bit_rate": "192000"
+  }
+}

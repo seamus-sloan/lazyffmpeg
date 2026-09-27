@@ -1,0 +1,24 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 640,
+      "height": 480,
+      "pix_fmt": "yuv420p",
+      "r_frame_rate": "30/1",
+      "avg_frame_rate": "0/0",
+      "duration": "5.000000",
+      "disposition": { "default": 1, "attached_pic": 0 }
+    }
+  ],
+  "format": {
+    "filename": "fps_fallback.mp4",
+    "nb_streams": 1,
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "duration": "5.000000",
+    "size": "1048576",
+    "bit_rate": "1677721"
+  }
+}

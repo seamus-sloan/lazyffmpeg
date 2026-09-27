@@ -1,0 +1,45 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "mjpeg",
+      "codec_type": "video",
+      "width": 600,
+      "height": 600,
+      "pix_fmt": "yuvj420p",
+      "r_frame_rate": "90000/1",
+      "avg_frame_rate": "0/0",
+      "disposition": { "default": 0, "attached_pic": 1 }
+    },
+    {
+      "index": 1,
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1920,
+      "height": 1080,
+      "pix_fmt": "yuv420p",
+      "r_frame_rate": "24/1",
+      "avg_frame_rate": "24/1",
+      "duration": "12.000000",
+      "disposition": { "default": 1, "attached_pic": 0 }
+    },
+    {
+      "index": 2,
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "sample_rate": "48000",
+      "channels": 2,
+      "bit_rate": "192000",
+      "duration": "12.000000",
+      "disposition": { "default": 1, "attached_pic": 0 }
+    }
+  ],
+  "format": {
+    "filename": "cover_art.m4a",
+    "nb_streams": 3,
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "duration": "12.000000",
+    "size": "3145728",
+    "bit_rate": "2097152"
+  }
+}
