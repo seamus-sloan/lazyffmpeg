@@ -275,8 +275,9 @@ func (m Model) footerLines() (string, string) {
 	opts := pipeline.Options{Input: m.session.Input, Output: outputPath}
 
 	var line1 string
-	argv, err := pipeline.Compile(m.session.Info, m.pipeline, opts)
-	if err != nil {
+	if m.notice != "" {
+		line1 = m.notice
+	} else if argv, err := pipeline.Compile(m.session.Info, m.pipeline, opts); err != nil {
 		line1 = err.Error()
 	} else {
 		line1 = pipeline.QuoteCommand(argv)
@@ -289,7 +290,7 @@ func (m Model) footerLines() (string, string) {
 		sizeStr = units.FormatSize(est.Bytes)
 		durStr = units.FormatClock(est.Duration)
 	}
-	hints := "enter run · tab focus · ? help · q quit"
+	hints := "r run · tab focus · ? help · q quit"
 	line2 := fmt.Sprintf("~%s · %s → %s  %s", sizeStr, durStr, outputPath, hints)
 
 	return line1, line2

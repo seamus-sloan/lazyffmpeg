@@ -83,6 +83,17 @@ func TestViewShowsFrameTitleAndInfoLine(t *testing.T) {
 	}
 }
 
+func TestFooterShowsKeyHints(t *testing.T) {
+	m := New(testSession(pipeline.New()))
+	m = resized(m, 100, 30)
+
+	out := viewText(m)
+	want := "r run · tab focus · ? help · q quit"
+	if !strings.Contains(out, want) {
+		t.Errorf("view missing footer hints %q, got:\n%s", want, out)
+	}
+}
+
 func TestViewShowsPipelineAndMenu(t *testing.T) {
 	pl := pipeline.New(pipeline.FrameRate{FPS: 30})
 	m := New(testSession(pl))

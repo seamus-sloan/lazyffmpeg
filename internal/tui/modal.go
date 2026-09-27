@@ -33,18 +33,9 @@ func isCustomOption(opts []modalOption, i int) bool {
 	return i >= 0 && i < len(opts) && opts[i].step == nil
 }
 
-// currentCodec returns p's Encoder step codec, or the default (libx264)
-// when there is none.
-func currentCodec(p pipeline.Pipeline) pipeline.Codec {
-	if e, ok := p.Find(pipeline.KindEncoder); ok {
-		return e.(pipeline.Encoder).Codec
-	}
-	return pipeline.CodecH264
-}
-
 // presetsFor returns kind's preset options against p (Quality's presets
-// depend on the pipeline's current encoder).
-func presetsFor(kind pipeline.Kind, p pipeline.Pipeline) []modalOption {
+// depend on codec, the pipeline's effective encoder).
+func presetsFor(kind pipeline.Kind, p pipeline.Pipeline, codec pipeline.Codec) []modalOption {
 	switch kind {
 	case pipeline.KindResolution:
 		return []modalOption{
@@ -87,7 +78,6 @@ func presetsFor(kind pipeline.Kind, p pipeline.Pipeline) []modalOption {
 			{"copy", pipeline.Encoder{Codec: pipeline.CodecCopy}},
 		}
 	case pipeline.KindQuality:
-		codec := currentCodec(p)
 		if codec == pipeline.CodecCopy {
 			return nil
 		}
@@ -240,7 +230,15 @@ func parseCustom(kind pipeline.Kind, text string) (pipeline.Step, error) {
 // value for kind when there is one (a matching preset, or Custom…
 // prefilled with its text).
 func (m Model) openModal(kind pipeline.Kind) Model {
-	opts := presetsFor(kind, m.pipeline)
+	container := pipeline.EffectiveContainer(m.session.OutputPath(m.pipeline), m.pipeline)
+	codec := pipeline.EffectiveCodec(m.pipeline, container)
+
+	if kind == pipeline.KindQuality && codec == pipeline.CodecCopy {
+		m.notice = "quality doesn't apply to copy"
+		return m
+	}
+
+	opts := presetsFor(kind, m.pipeline, codec)
 	ms := modalState{kind: kind, options: opts}
 
 	ti := textinput.New()
@@ -302,6 +300,10 @@ func (m Model) moveModalCursor(delta int) Model {
 
 func (m Model) confirmModal() Model {
 	ms := *m.modal
+	if len(ms.options) == 0 {
+		m.modal = nil
+		return m
+	}
 	var step pipeline.Step
 	if isCustomOption(ms.options, ms.cursor) {
 		parsed, err := parseCustom(ms.kind, ms.input.Value())

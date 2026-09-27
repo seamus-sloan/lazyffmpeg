@@ -67,17 +67,11 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 	afChain := strings.Join(afParts, ",")
 	hasAudioFilters := afChain != ""
 
-	container := effectiveContainer(opt.Output, p)
-
-	codec := CodecH264
-	if e, ok := p.Find(KindEncoder); ok {
-		codec = e.(Encoder).Codec
-	}
+	container := EffectiveContainer(opt.Output, p)
+	codec := EffectiveCodec(p, container)
 
 	if container == FormatWebM {
-		if _, hasEncoder := p.Find(KindEncoder); !hasEncoder {
-			codec = CodecVP9
-		} else {
+		if _, hasEncoder := p.Find(KindEncoder); hasEncoder {
 			switch codec {
 			case CodecVP9, CodecAV1:
 				// ok
@@ -145,9 +139,9 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 	return argv, nil
 }
 
-// effectiveContainer resolves the output's container: a Container step
+// EffectiveContainer resolves the output's container: a Container step
 // overrides the output path's extension.
-func effectiveContainer(output string, p Pipeline) Format {
+func EffectiveContainer(output string, p Pipeline) Format {
 	if c, ok := p.Find(KindContainer); ok {
 		return c.(Container).Format
 	}
@@ -162,6 +156,21 @@ func effectiveContainer(output string, p Pipeline) Format {
 		return FormatWebM
 	}
 	return ""
+}
+
+// EffectiveCodec returns the video codec Compile would use for p against an
+// output whose resolved container is out: the pipeline's Encoder step when
+// it has one, VP9 for a webm output with none, else libx264. Callers such
+// as the TUI's Quality modal use it to preselect a preset before Compile
+// validates anything.
+func EffectiveCodec(p Pipeline, out Format) Codec {
+	if e, ok := p.Find(KindEncoder); ok {
+		return e.(Encoder).Codec
+	}
+	if out == FormatWebM {
+		return CodecVP9
+	}
+	return CodecH264
 }
 
 func muxerName(f Format) string {

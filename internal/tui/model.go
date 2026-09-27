@@ -82,6 +82,7 @@ type Model struct {
 	showFullCommand bool
 	showHelp        bool
 	quitting        bool
+	notice          string // a transient hint shown in the footer for one frame
 
 	listFn  ListFunc
 	probeFn ProbeFunc
@@ -212,6 +213,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modePicker {
 		return m.handlePickerKey(msg)
 	}
+
+	m.notice = ""
 
 	switch key {
 	case "q", "ctrl+c":

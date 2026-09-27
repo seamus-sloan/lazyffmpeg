@@ -509,6 +509,28 @@ func TestCompileRawArgsBeforeOutput(t *testing.T) {
 	}
 }
 
+func TestEffectiveCodecDefaultsToWebmVP9(t *testing.T) {
+	if got := EffectiveCodec(New(), FormatWebM); got != CodecVP9 {
+		t.Errorf("EffectiveCodec(no encoder, webm) = %v, want CodecVP9", got)
+	}
+	if got := EffectiveCodec(New(), FormatMP4); got != CodecH264 {
+		t.Errorf("EffectiveCodec(no encoder, mp4) = %v, want CodecH264", got)
+	}
+	p := New(Encoder{Codec: CodecH265})
+	if got := EffectiveCodec(p, FormatWebM); got != CodecH265 {
+		t.Errorf("EffectiveCodec(explicit encoder) = %v, want CodecH265 (explicit wins)", got)
+	}
+}
+
+func TestEffectiveContainerFromOutputExtension(t *testing.T) {
+	if got := EffectiveContainer("OUT.webm", New()); got != FormatWebM {
+		t.Errorf("EffectiveContainer(.webm) = %v, want FormatWebM", got)
+	}
+	if got := EffectiveContainer("OUT.mp4", New(Container{Format: FormatMKV})); got != FormatMKV {
+		t.Errorf("EffectiveContainer with a Container step = %v, want FormatMKV (step wins)", got)
+	}
+}
+
 func TestValidateMirrorsCompile(t *testing.T) {
 	p := New(Speed{Factor: 2}, Trim{Start: 20})
 	if err := Validate(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"}); !errors.Is(err, ErrTrimRange) {

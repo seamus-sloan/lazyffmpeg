@@ -38,16 +38,8 @@ func Estimate(info probe.Info, p Pipeline, opt Options) (SizeEstimate, error) {
 		}
 	}
 
-	container := effectiveContainer(opt.Output, p)
-	codec := CodecH264
-	if e, ok := p.Find(KindEncoder); ok {
-		codec = e.(Encoder).Codec
-	}
-	if container == FormatWebM {
-		if _, hasEncoder := p.Find(KindEncoder); !hasEncoder {
-			codec = CodecVP9
-		}
-	}
+	container := EffectiveContainer(opt.Output, p)
+	codec := EffectiveCodec(p, container)
 
 	if codec == CodecCopy {
 		bytes := int64(float64(info.BitRate) * dur / 8)

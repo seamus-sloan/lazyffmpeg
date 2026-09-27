@@ -309,6 +309,40 @@ func TestContainerMkvChangesFooterOutputPath(t *testing.T) {
 	}
 }
 
+func TestQualityModalDoesNotOpenForCopyEncoder(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("opening the Quality modal with encoder copy panicked: %v", r)
+		}
+	}()
+	pl := pipeline.New(pipeline.Encoder{Codec: pipeline.CodecCopy})
+	m := resized(New(testSession(pl)), 100, 30)
+	m = openMenu(t, m, pipeline.KindQuality)
+	if m.modal != nil {
+		t.Fatal("Quality modal opened despite encoder copy")
+	}
+
+	// A second enter (as if a modal had opened) must not panic or change
+	// the pipeline either.
+	mm, _ := m.Update(key("enter"))
+	m = mm.(Model)
+	if _, ok := m.pipeline.Find(pipeline.KindQuality); ok {
+		t.Error("pipeline gained a Quality step despite encoder copy")
+	}
+}
+
+func TestQualityPresetsUseWebmDefaultCodecWithNoEncoderStep(t *testing.T) {
+	pl := pipeline.New(pipeline.Container{Format: pipeline.FormatWebM})
+	m := New(testSession(pl))
+	m = resized(m, 100, 30)
+	m = openMenu(t, m, pipeline.KindQuality)
+
+	out := viewText(m)
+	if !strings.Contains(out, "Default (CRF 33)") {
+		t.Errorf("Quality modal missing webm's default vp9 CRF, got:\n%s", out)
+	}
+}
+
 func TestQualityPresetsUseCurrentEncoderDefaultCRF(t *testing.T) {
 	pl := pipeline.New(pipeline.Encoder{Codec: pipeline.CodecVP9})
 	m := New(testSession(pl))
