@@ -153,6 +153,41 @@ func TestToggleResultMode(t *testing.T) {
 	}
 }
 
+func TestTogglingPlayOffThenOnDropsTheStaleTickChain(t *testing.T) {
+	fn, _ := fakeRenderer("F", nil)
+	m := step(t, New(testSession(pipeline.New()), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	mm, c1 := m.Update(key("space")) // play on: chain A starts
+	m = mm.(Model)
+	mm, _ = m.Update(key("space")) // pause: chain A is now stale
+	m = mm.(Model)
+	mm, c3 := m.Update(key("space")) // play on again: chain B starts
+	m = mm.(Model)
+
+	if c1 == nil || c3 == nil {
+		t.Fatal("space did not issue a tick command")
+	}
+
+	// The stale chain-A tick must be dropped without re-arming.
+	staleMsg := c1()
+	mm, staleCmd := m.Update(staleMsg)
+	m = mm.(Model)
+	if staleCmd != nil {
+		t.Fatal("a stale tick from a superseded play session re-armed")
+	}
+
+	// The current chain-B tick advances playback and re-arms normally.
+	msg := c3()
+	mm, cmd := m.Update(msg)
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("the current tick chain did not re-arm")
+	}
+	if m.preview.time <= 0 {
+		t.Errorf("current tick chain did not advance playback, time = %v", m.preview.time)
+	}
+}
+
 func TestSpacePlayAdvancesAndStopsAtRangeEnd(t *testing.T) {
 	fn, _ := fakeRenderer("F", nil)
 	pl := pipeline.New(pipeline.Trim{Start: 32.8, End: 33})

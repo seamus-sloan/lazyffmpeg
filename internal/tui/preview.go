@@ -30,6 +30,9 @@ type previewState struct {
 	time       float64 // current position, in input-timeline seconds
 	resultMode bool    // false = original, true = result
 	playing    bool
+	playGen    int // bumped each time playback is paused, so a tick from a
+	// since-superseded play session (still ticking down from before it was
+	// paused) is recognized as stale and dropped rather than re-armed
 
 	frame    string
 	frameErr string
@@ -48,13 +51,14 @@ type previewFrameMsg struct {
 	err  error
 }
 
-// previewTickMsg advances playback by one frame interval.
-type previewTickMsg struct{}
+// previewTickMsg advances playback by one frame interval. gen ties it to
+// the play session that scheduled it (see previewState.playGen).
+type previewTickMsg struct{ gen int }
 
 const previewTickInterval = 125 * time.Millisecond
 
-func previewTickCmd() tea.Cmd {
-	return tea.Tick(previewTickInterval, func(time.Time) tea.Msg { return previewTickMsg{} })
+func previewTickCmd(gen int) tea.Cmd {
+	return tea.Tick(previewTickInterval, func(time.Time) tea.Msg { return previewTickMsg{gen: gen} })
 }
 
 // previewRange returns the current preview mode's playable input-time
@@ -158,13 +162,14 @@ func (m Model) togglePreviewMode() (Model, tea.Cmd) {
 func (m Model) togglePlay() (Model, tea.Cmd) {
 	m.preview.playing = !m.preview.playing
 	if m.preview.playing {
-		return m, previewTickCmd()
+		return m, previewTickCmd(m.preview.playGen)
 	}
+	m.preview.playGen++ // invalidate any tick still ticking down from this session
 	return m, nil
 }
 
 func (m Model) handlePreviewTick(msg previewTickMsg) (tea.Model, tea.Cmd) {
-	if !m.preview.playing {
+	if !m.preview.playing || msg.gen != m.preview.playGen {
 		return m, nil
 	}
 	rate := 1.0
@@ -179,7 +184,7 @@ func (m Model) handlePreviewTick(msg previewTickMsg) (tea.Model, tea.Cmd) {
 		t = hi
 		m.preview.playing = false
 	} else {
-		cmds = append(cmds, previewTickCmd())
+		cmds = append(cmds, previewTickCmd(m.preview.playGen))
 	}
 	m.preview.time = t
 
