@@ -127,6 +127,25 @@ func TestOutputDimensionsFitBox(t *testing.T) {
 	}
 }
 
+func TestOutputDimensionsFitRoundsToNearestEven(t *testing.T) {
+	cases := []struct {
+		iw, ih, boxW, boxH, wantW, wantH int
+	}{
+		{3652, 2560, 1280, 720, 1028, 720},
+		{1000, 777, 640, 360, 464, 360},
+		{641, 479, 320, 240, 320, 240},
+	}
+	for _, c := range cases {
+		info := infoForEstimate(c.iw, c.ih, 30, 10, 0)
+		p := New(Resolution{Width: c.boxW, Height: c.boxH})
+		w, h := OutputDimensions(info, p)
+		if w != c.wantW || h != c.wantH {
+			t.Errorf("OutputDimensions(%dx%d into %dx%d) = %dx%d, want %dx%d",
+				c.iw, c.ih, c.boxW, c.boxH, w, h, c.wantW, c.wantH)
+		}
+	}
+}
+
 func TestOutputDimensionsWidthOnly(t *testing.T) {
 	info := infoForEstimate(3652, 2560, 60, 33, 0)
 	p := New(Resolution{Width: 1280})

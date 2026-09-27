@@ -169,6 +169,46 @@ func TestIntegrationResolutionFitInsideBox(t *testing.T) {
 	}
 }
 
+func TestIntegrationOutputDimensionsMatchRealEncode(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	cases := []struct {
+		name string
+		w, h int
+		res  pipeline.Resolution
+	}{
+		{"fit", 642, 480, pipeline.Resolution{Width: 320, Height: 240}},
+		{"single side", 642, 480, pipeline.Resolution{Width: 320}},
+		{"percent", 640, 480, pipeline.Resolution{Percent: 50}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			in := testclip.Make(t, testclip.Spec{Width: c.w, Height: c.h, Seconds: 1})
+			out := filepath.Join(filepath.Dir(in), "out.mp4")
+
+			info, err := probe.Run(context.Background(), in)
+			if err != nil {
+				t.Fatalf("probe.Run: %v", err)
+			}
+			p := pipeline.New(c.res)
+			argv, err := pipeline.Compile(info, p, pipeline.Options{Input: in, Output: out})
+			if err != nil {
+				t.Fatalf("Compile: %v", err)
+			}
+			runFFmpeg(t, argv)
+
+			outInfo, err := probe.Run(context.Background(), out)
+			if err != nil {
+				t.Fatalf("probe.Run(out): %v", err)
+			}
+			wantW, wantH := pipeline.OutputDimensions(info, p)
+			if outInfo.Video.Width != wantW || outInfo.Video.Height != wantH {
+				t.Errorf("real encode dims = %dx%d, want OutputDimensions() = %dx%d",
+					outInfo.Video.Width, outInfo.Video.Height, wantW, wantH)
+			}
+		})
+	}
+}
+
 func TestIntegrationAudioRemove(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1, Audio: true})

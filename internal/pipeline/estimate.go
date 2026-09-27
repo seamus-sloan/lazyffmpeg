@@ -121,7 +121,7 @@ func OutputDimensions(info probe.Info, p Pipeline) (w, h int) {
 			return evenDown(res.Width), evenDown(res.Height)
 		}
 		scale := math.Min(float64(res.Width)/float64(iw), float64(res.Height)/float64(ih))
-		return evenFloor(float64(iw) * scale), evenFloor(float64(ih) * scale)
+		return evenRound(float64(iw) * scale), evenRound(float64(ih) * scale)
 	case res.Width > 0:
 		return res.Width, evenRound(float64(ih) * float64(res.Width) / float64(iw))
 	case res.Height > 0:
