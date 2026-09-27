@@ -241,7 +241,11 @@ func (m Model) leftColumnLines() []string {
 
 	lines = append(lines, m.infoLine())
 	lines = append(lines, "")
-	lines = append(lines, "PIPELINE")
+	heading := "PIPELINE"
+	if m.focus == focusPipeline {
+		heading = focusedHeadingStyle.Render(heading)
+	}
+	lines = append(lines, heading)
 	lines = append(lines, m.pipelineLines()...)
 
 	return lines
@@ -297,7 +301,11 @@ func (m Model) pipelineLines() []string {
 
 func (m Model) menuLines() []string {
 	var lines []string
-	lines = append(lines, "MENU")
+	heading := "MENU"
+	if m.focus == focusMenu {
+		heading = focusedHeadingStyle.Render(heading)
+	}
+	lines = append(lines, heading)
 
 	idx := 0
 	addItem := func(label string) {

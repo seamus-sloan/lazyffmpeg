@@ -226,6 +226,30 @@ func TestViewResizeRestoresLayout(t *testing.T) {
 	}
 }
 
+func TestFocusedHeadingIsStyled(t *testing.T) {
+	m := New(testSession(pipeline.New()))
+	m = resized(m, 100, 30)
+
+	// MENU is focused by default.
+	raw := m.View().Content
+	if !strings.Contains(raw, focusedHeadingStyle.Render("MENU")) {
+		t.Errorf("focused MENU heading is not styled, got:\n%s", raw)
+	}
+	if strings.Contains(raw, focusedHeadingStyle.Render("PIPELINE")) {
+		t.Errorf("unfocused PIPELINE heading is styled, got:\n%s", raw)
+	}
+
+	mm, _ := m.Update(key("tab"))
+	m = mm.(Model)
+	raw = m.View().Content
+	if !strings.Contains(raw, focusedHeadingStyle.Render("PIPELINE")) {
+		t.Errorf("focused PIPELINE heading is not styled after tab, got:\n%s", raw)
+	}
+	if strings.Contains(raw, focusedHeadingStyle.Render("MENU")) {
+		t.Errorf("unfocused MENU heading is styled after tab, got:\n%s", raw)
+	}
+}
+
 func TestTabTogglesFocus(t *testing.T) {
 	m := New(testSession(pipeline.New()))
 	m = resized(m, 100, 30)
