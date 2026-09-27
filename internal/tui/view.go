@@ -24,7 +24,12 @@ func (m Model) View() tea.View {
 		return v
 	}
 
-	body := m.renderFrame()
+	var body string
+	if m.mode == modePicker {
+		body = m.renderPickerFrame()
+	} else {
+		body = m.renderFrame()
+	}
 	if m.showHelp {
 		body = m.overlayHelp(body)
 	}
@@ -33,6 +38,9 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) frameTitle() string {
+	if m.mode == modePicker {
+		return "lazyff · " + m.picker.dir
+	}
 	return "lazyff · " + filepath.Base(m.session.Input)
 }
 
@@ -65,17 +73,23 @@ func (m Model) previewBoxSize() (cols, rows int) {
 	return boxWidth, boxRows
 }
 
-func (m Model) renderFrame() string {
-	width := m.width
-	title := m.frameTitle()
-
+func frameTop(width int, title string) string {
 	left := "╭─ " + title + " "
 	remaining := width - lipgloss.Width(left) - 1
 	if remaining < 0 {
 		remaining = 0
 	}
-	top := left + strings.Repeat("─", remaining) + "╮"
-	bottom := "╰" + strings.Repeat("─", maxInt(width-2, 0)) + "╯"
+	return left + strings.Repeat("─", remaining) + "╮"
+}
+
+func frameBottom(width int) string {
+	return "╰" + strings.Repeat("─", maxInt(width-2, 0)) + "╯"
+}
+
+func (m Model) renderFrame() string {
+	width := m.width
+	top := frameTop(width, m.frameTitle())
+	bottom := frameBottom(width)
 
 	leftLines := m.leftColumnLines()
 	rightLines := m.menuLines()
@@ -266,7 +280,20 @@ func (m Model) footerCommandLine(raw string) string {
 	return raw
 }
 
-func helpText() string {
+func (m Model) helpText() string {
+	if m.mode == modePicker {
+		return strings.Join([]string{
+			"Keys",
+			"  j/k, ↑/↓        move the cursor",
+			"  enter           open the directory, or probe the file",
+			"  backspace,h,←   go to the parent directory",
+			"  /               filter (esc clears, enter accepts)",
+			"  q, ctrl+c       quit",
+			"  ?               toggle this help",
+			"",
+			"press any key to close",
+		}, "\n")
+	}
 	return strings.Join([]string{
 		"Keys",
 		"  tab          switch focus between MENU and PIPELINE",
@@ -282,11 +309,85 @@ func helpText() string {
 	}, "\n")
 }
 
+func (m Model) renderPickerFrame() string {
+	width := m.width
+	top := frameTop(width, m.frameTitle())
+	bottom := frameBottom(width)
+
+	var lines []string
+	lines = append(lines, top)
+	for _, l := range m.pickerBodyLines() {
+		lines = append(lines, sideLine(width, padOrTruncate(l, m.innerWidth())))
+	}
+	lines = append(lines, bottom)
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) pickerBodyLines() []string {
+	var lines []string
+
+	entries := m.pickerVisibleEntries()
+	usable := 0
+	for _, e := range entries {
+		if !e.IsDir {
+			usable++
+		}
+	}
+	noun := "files"
+	if usable == 1 {
+		noun = "file"
+	}
+	lines = append(lines, fmt.Sprintf("%d usable %s", usable, noun))
+
+	if m.picker.filtering || m.picker.filter != "" {
+		lines = append(lines, "filter: "+m.picker.filter)
+	}
+	lines = append(lines, "")
+
+	if m.picker.status != "" {
+		lines = append(lines, errorStyle.Render(m.picker.status))
+		lines = append(lines, "")
+	}
+
+	hasParent := m.pickerHasParentRow()
+	if len(entries) == 0 {
+		lines = append(lines, fmt.Sprintf("No video files in %s", m.picker.dir))
+		if hasParent {
+			lines = append(lines, "backspace: go up a directory")
+		}
+		return lines
+	}
+
+	row := 0
+	if hasParent {
+		prefix := "  "
+		if m.picker.cursor == row {
+			prefix = "> "
+		}
+		lines = append(lines, prefix+"..")
+		row++
+	}
+	for _, e := range entries {
+		prefix := "  "
+		if m.picker.cursor == row {
+			prefix = "> "
+		}
+		if e.IsDir {
+			lines = append(lines, fmt.Sprintf("%s%s/", prefix, e.Name))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s%-40s %10s  %s", prefix, e.Name,
+				units.FormatSize(e.Size), e.ModTime.Format("2006-01-02")))
+		}
+		row++
+	}
+	return lines
+}
+
 func (m Model) overlayHelp(base string) string {
 	modal := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		Padding(1, 2).
-		Render(helpText())
+		Render(m.helpText())
 
 	baseW, baseH := lipgloss.Width(base), lipgloss.Height(base)
 	mw, mh := lipgloss.Width(modal), lipgloss.Height(modal)

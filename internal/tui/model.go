@@ -10,6 +10,15 @@ import (
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
+	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
+)
+
+// screenMode names which screen the program is showing.
+type screenMode int
+
+const (
+	modeMain screenMode = iota
+	modePicker
 )
 
 // focusArea names which panel has keyboard focus on the main screen.
@@ -46,6 +55,11 @@ func menuItemLabel(k pipeline.Kind) string {
 
 // Model is the TUI's Bubble Tea model.
 type Model struct {
+	ctx context.Context
+
+	mode   screenMode
+	picker pickerState
+
 	session  app.Session
 	pipeline pipeline.Pipeline
 	undo     []pipeline.Pipeline
@@ -59,16 +73,44 @@ type Model struct {
 	showFullCommand bool
 	showHelp        bool
 	quitting        bool
+
+	listFn  ListFunc
+	probeFn ProbeFunc
 }
 
 // Option configures a Model built by New.
 type Option func(*Model)
 
-// New builds a Model for session, applying any Options.
+// WithLister overrides the function used to list a directory (Task 10b).
+func WithLister(fn ListFunc) Option {
+	return func(m *Model) { m.listFn = fn }
+}
+
+// WithProber overrides the function used to probe a chosen file (Task 10b).
+func WithProber(fn ProbeFunc) Option {
+	return func(m *Model) { m.probeFn = fn }
+}
+
+// withContext threads the outer run context through to async commands. It
+// is unexported: only Run sets it, tests use the zero value's background
+// context.
+func withContext(ctx context.Context) Option {
+	return func(m *Model) { m.ctx = ctx }
+}
+
+// New builds a Model for session, applying any Options. When session.Input
+// is empty, the model starts in the file picker, browsing session.Dir.
 func New(s app.Session, opts ...Option) Model {
 	m := Model{
+		ctx:      context.Background(),
 		session:  s,
 		pipeline: s.Pipeline,
+		listFn:   defaultList,
+		probeFn:  probe.Run,
+	}
+	if s.Input == "" {
+		m.mode = modePicker
+		m.picker.dir = s.Dir
 	}
 	for _, opt := range opts {
 		opt(&m)
@@ -76,8 +118,12 @@ func New(s app.Session, opts ...Option) Model {
 	return m
 }
 
-// Init starts the program; it currently issues no commands.
+// Init starts the program: in picker mode it kicks off the initial
+// directory listing.
 func (m Model) Init() tea.Cmd {
+	if m.mode == modePicker {
+		return m.listCmd()
+	}
 	return nil
 }
 
@@ -96,6 +142,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case pickerListedMsg:
+		return m.handlePickerListed(msg)
+
+	case pickerProbedMsg:
+		return m.handlePickerProbed(msg)
 	}
 	return m, nil
 }
@@ -108,13 +160,21 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// '?' opens help, except while the picker's filter is capturing text
+	// (where '?' is a filterable character).
+	if key == "?" && !(m.mode == modePicker && m.picker.filtering) {
+		m.showHelp = true
+		return m, nil
+	}
+
+	if m.mode == modePicker {
+		return m.handlePickerKey(msg)
+	}
+
 	switch key {
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
-	case "?":
-		m.showHelp = true
-		return m, nil
 	case "c":
 		m.showFullCommand = !m.showFullCommand
 		return m, nil
@@ -241,7 +301,7 @@ func clamp(v, lo, hi int) int {
 
 // Run starts the TUI program for session and blocks until it exits.
 func Run(ctx context.Context, s app.Session) error {
-	m := New(s)
+	m := New(s, withContext(ctx))
 	p := tea.NewProgram(m, tea.WithContext(ctx))
 	_, err := p.Run()
 	return err
