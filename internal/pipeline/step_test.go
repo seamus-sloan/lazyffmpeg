@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -62,6 +63,10 @@ func TestResolutionValidate(t *testing.T) {
 		{Percent: 401},                           // above max
 		{Percent: 0},                             // zero
 		{Width: 1920, Exact: true},               // exact needs both sides
+		{Percent: math.NaN()},                    // NaN percent
+		{Percent: math.Inf(1)},                   // +Inf percent
+		{Percent: math.Inf(-1)},                  // -Inf percent
+		{Width: 1920, Height: 1080, Percent: math.NaN()}, // NaN percent alongside valid sides
 	}
 	for _, r := range invalid {
 		if err := r.Validate(); !errors.Is(err, ErrInvalidStep) {
@@ -126,6 +131,11 @@ func TestSpeedValidate(t *testing.T) {
 	if err := (Speed{Factor: 101}).Validate(); !errors.Is(err, ErrInvalidStep) {
 		t.Errorf("Validate(101) = %v, want ErrInvalidStep", err)
 	}
+	for _, f := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if err := (Speed{Factor: f}).Validate(); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("Validate(%v) = %v, want ErrInvalidStep", f, err)
+		}
+	}
 }
 
 func TestSpeedFilters(t *testing.T) {
@@ -172,7 +182,11 @@ func TestTrimValidate(t *testing.T) {
 			t.Errorf("Validate(%+v) = %v, want nil", tr, err)
 		}
 	}
-	invalid := []Trim{{Start: -1}, {}, {Start: 20, End: 5}, {Start: 20, End: 20}}
+	invalid := []Trim{
+		{Start: -1}, {}, {Start: 20, End: 5}, {Start: 20, End: 20},
+		{Start: math.NaN(), End: 20}, {Start: 5, End: math.NaN()},
+		{Start: math.Inf(1)}, {Start: 5, End: math.Inf(1)},
+	}
 	for _, tr := range invalid {
 		if err := tr.Validate(); !errors.Is(err, ErrInvalidStep) {
 			t.Errorf("Validate(%+v) = %v, want ErrInvalidStep", tr, err)
@@ -227,6 +241,11 @@ func TestFrameRateValidate(t *testing.T) {
 	}
 	if err := (FrameRate{FPS: 241}).Validate(); !errors.Is(err, ErrInvalidStep) {
 		t.Errorf("Validate(241) = %v, want ErrInvalidStep", err)
+	}
+	for _, f := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if err := (FrameRate{FPS: f}).Validate(); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("Validate(%v) = %v, want ErrInvalidStep", f, err)
+		}
 	}
 }
 

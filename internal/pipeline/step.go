@@ -6,6 +6,7 @@ package pipeline
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/units"
@@ -94,12 +95,15 @@ type Resolution struct {
 func (Resolution) Kind() Kind { return KindResolution }
 
 func (r Resolution) Validate() error {
+	if math.IsNaN(r.Percent) || math.IsInf(r.Percent, 0) {
+		return invalidf("resolution percent must be a finite number")
+	}
 	hasPercent := r.Percent > 0
 	hasSides := r.Width > 0 || r.Height > 0
 	if hasPercent == hasSides {
 		return invalidf("resolution needs either a percent or width/height, not both or neither")
 	}
-	if hasPercent && r.Percent > 400 {
+	if hasPercent && !(r.Percent > 0 && r.Percent <= 400) {
 		return invalidf("resolution percent %v out of range (0,400]", r.Percent)
 	}
 	if r.Width > 0 && (r.Width < 2 || r.Width > 16384) {
@@ -164,7 +168,7 @@ type Speed struct {
 func (Speed) Kind() Kind { return KindSpeed }
 
 func (s Speed) Validate() error {
-	if s.Factor < 0.01 || s.Factor > 100 {
+	if !(s.Factor >= 0.01 && s.Factor <= 100) {
 		return invalidf("speed factor %v out of range [0.01,100]", s.Factor)
 	}
 	return nil
@@ -215,6 +219,12 @@ type Trim struct {
 func (Trim) Kind() Kind { return KindTrim }
 
 func (t Trim) Validate() error {
+	if math.IsNaN(t.Start) || math.IsInf(t.Start, 0) {
+		return invalidf("trim start must be a finite number")
+	}
+	if math.IsNaN(t.End) || math.IsInf(t.End, 0) {
+		return invalidf("trim end must be a finite number")
+	}
 	if t.Start < 0 {
 		return invalidf("trim start %v must be >= 0", t.Start)
 	}
@@ -263,7 +273,7 @@ type FrameRate struct {
 func (FrameRate) Kind() Kind { return KindFrameRate }
 
 func (f FrameRate) Validate() error {
-	if f.FPS <= 0 || f.FPS > 240 {
+	if !(f.FPS > 0 && f.FPS <= 240) {
 		return invalidf("frame rate %v out of range (0,240]", f.FPS)
 	}
 	return nil

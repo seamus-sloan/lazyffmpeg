@@ -33,7 +33,7 @@ func ParseTime(s string) (float64, error) {
 	switch len(parts) {
 	case 1:
 		v, err := strconv.ParseFloat(parts[0], 64)
-		if err != nil || v < 0 {
+		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
 			return 0, syntaxErr(s)
 		}
 		return v, nil

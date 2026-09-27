@@ -127,6 +127,27 @@ func TestParseFPSErrors(t *testing.T) {
 	}
 }
 
+// TestParseRejectsNaNAndInf covers the value parsers that accept a raw
+// number: strconv.ParseFloat happily parses "nan"/"inf" text into NaN/±Inf,
+// so each of these must reject it explicitly rather than silently storing
+// a non-finite step value.
+func TestParseRejectsNaNAndInf(t *testing.T) {
+	for _, n := range []string{"nan", "NaN", "inf", "-inf", "Inf", "+Inf"} {
+		if _, err := ParseSpeed(n); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("ParseSpeed(%q) error = %v, want ErrInvalidStep", n, err)
+		}
+		if _, err := ParseFPS(n); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("ParseFPS(%q) error = %v, want ErrInvalidStep", n, err)
+		}
+		if _, err := ParseTrim(n + "-"); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("ParseTrim(%q) error = %v, want ErrInvalidStep", n+"-", err)
+		}
+		if _, err := ParseResolution(n + "%"); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("ParseResolution(%q) error = %v, want ErrInvalidStep", n+"%", err)
+		}
+	}
+}
+
 func TestParseCodec(t *testing.T) {
 	cases := map[string]Codec{
 		"h264":              CodecH264,

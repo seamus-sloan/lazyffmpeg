@@ -29,7 +29,8 @@ func TestParseTime(t *testing.T) {
 }
 
 func TestParseTimeErrors(t *testing.T) {
-	for _, in := range []string{"", "-1", "1:60", "1:2:3:4", "1:30.1234", "abc"} {
+	for _, in := range []string{"", "-1", "1:60", "1:2:3:4", "1:30.1234", "abc",
+		"nan", "NaN", "inf", "-inf", "Inf", "+Inf"} {
 		if _, err := ParseTime(in); err == nil {
 			t.Errorf("ParseTime(%q) expected error, got nil", in)
 		} else if !errors.Is(err, ErrSyntax) {
