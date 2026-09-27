@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -478,6 +479,35 @@ func TestRunExitErrorShowsTailAnyKeyReturns(t *testing.T) {
 	m = mm.(Model)
 	if m.run.phase != runNone {
 		t.Error("a key on the error view did not return to the main screen")
+	}
+}
+
+func TestRunErrorViewShowsTheEndOfALongTailAt80x24(t *testing.T) {
+	dir := t.TempDir()
+	tail := make([]string, 20)
+	for i := range tail {
+		tail[i] = fmt.Sprintf("ffmpeg stderr line %d", i+1)
+	}
+	fake := func(ctx context.Context, job runner.Job, onProgress func(runner.Progress)) (runner.Result, error) {
+		return runner.Result{}, &runner.ExitError{Code: 1, Tail: tail}
+	}
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: filepath.Join(dir, "out.mp4")}
+	m := resized(New(s, WithRunner(fake)), 80, 24)
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	mm, _ = m.Update(cmd())
+	out := viewText(mm.(Model))
+
+	if h := strings.Count(out, "\n") + 1; h > 24 {
+		t.Fatalf("run error view is %d lines in an 80x24 terminal:\n%s", h, out)
+	}
+	for _, want := range []string{"ffmpeg failed:", "ffmpeg stderr line 20", "press any key to continue"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("run error view is missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "ffmpeg stderr line 1 ") {
+		t.Errorf("run error view kept the start of the tail instead of its end:\n%s", out)
 	}
 }
 

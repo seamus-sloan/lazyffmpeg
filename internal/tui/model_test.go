@@ -181,6 +181,27 @@ func TestFullCommandFullyShownAcrossFooterLinesWhenExpanded(t *testing.T) {
 	}
 }
 
+func TestExpandedCommandIsCappedToFitAt80x24(t *testing.T) {
+	long := strings.Repeat("y", 400)
+	pl := pipeline.New(pipeline.RawArgs{Text: long, Args: []string{long}})
+	m := resized(New(testSession(pl)), 80, 24)
+	mm, _ := m.Update(key("c"))
+	m = mm.(Model)
+
+	out := viewText(m)
+	if h := strings.Count(out, "\n") + 1; h > 24 {
+		t.Fatalf("c-expanded main frame is %d lines in an 80x24 terminal:\n%s", h, out)
+	}
+	commandLines, _ := m.footerLines()
+	last := commandLines[len(commandLines)-1]
+	if !strings.HasSuffix(last, "…") {
+		t.Errorf("capped command's last line = %q, want it to end with …", last)
+	}
+	if !strings.Contains(out, "r run · tab focus") {
+		t.Errorf("footer's second line is missing:\n%s", out)
+	}
+}
+
 func TestPipelineWindowKeepsCursorVisible(t *testing.T) {
 	cases := []struct{ stepCount, visible, cursor, wantStart, wantEnd int }{
 		{9, 9, 4, 0, 9}, // fits entirely: no scroll

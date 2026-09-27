@@ -340,16 +340,19 @@ func (m Model) runBodyLines() []string {
 		}
 
 	case runError:
-		var lines []string
 		var exitErr *runner.ExitError
-		if errors.As(rs.err, &exitErr) {
-			lines = append(lines, "ffmpeg failed:")
-			lines = append(lines, exitErr.Tail...)
-		} else {
-			lines = append(lines, "Error: "+rs.err.Error())
+		if !errors.As(rs.err, &exitErr) {
+			return []string{"Error: " + rs.err.Error(), "", "press any key to continue"}
 		}
-		lines = append(lines, "", "press any key to continue")
-		return lines
+		// Show as much of the end of ffmpeg's stderr as fits between the
+		// heading and the two closing lines inside the frame's borders.
+		tail := exitErr.Tail
+		room := maxInt(m.height-2-3, 0)
+		if len(tail) > room {
+			tail = tail[len(tail)-room:]
+		}
+		lines := append([]string{"ffmpeg failed:"}, tail...)
+		return append(lines, "", "press any key to continue")
 	}
 	return nil
 }

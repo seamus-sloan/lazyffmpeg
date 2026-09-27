@@ -71,20 +71,37 @@ func (m Model) leftColumnWidth() int {
 // shrinks to when the frame is squeezed to fit the terminal height.
 const minPreviewRows = 3
 
+// frameChromeRows counts the main frame's rows outside its two columns
+// and the footer's command line(s): the top border, the blank line above
+// the footer, the footer's estimate/output/hints line, the bottom border.
+const frameChromeRows = 4
+
+// leftColumnFixedRows counts the left column's rows other than the preview
+// box's content and the PIPELINE list: the preview box's top and bottom
+// border, the info line, the blank line and the PIPELINE heading.
+const leftColumnFixedRows = 5
+
+// maxFooterCommandLines is how many lines the footer's expanded command
+// may take. The two columns share rows, so the frame is frameChromeRows +
+// the command lines + the taller column; the MENU column's height is fixed,
+// and the left column needs at least minPreviewRows of preview and one
+// PIPELINE row, so whatever is left after the taller of those two is the
+// command's to use.
+func (m Model) maxFooterCommandLines() int {
+	columns := maxInt(len(m.menuLines()), leftColumnFixedRows+minPreviewRows+1)
+	return maxInt(m.height-frameChromeRows-columns, 1)
+}
+
 // layoutBudget divides the rows left after every fixed line (borders,
 // info line, PIPELINE heading, footer) between the preview box and the
 // PIPELINE list so the whole frame never exceeds m.height: the preview
 // box shrinks first, down to minPreviewRows; once that floor is hit, the
 // PIPELINE list itself is capped (and scrolled, see pipelineWindow) down
-// to a floor of one row.
+// to a floor of one row. footerLineCount is at most
+// maxFooterCommandLines, which keeps the left column (and the MENU column
+// beside it) within the rows that remain.
 func (m Model) layoutBudget(footerLineCount, stepCount int) (previewRows, pipelineRows int) {
-	// 3: top border, the blank line above the footer, bottom border.
-	// 2: the preview box's own top/bottom border.
-	// 1+1+1: info line, blank line, "PIPELINE" heading.
-	// footerLineCount + 1: the footer's command line(s) plus its second
-	// (estimate/output/hints) line, which footerLineCount does not count.
-	fixed := 3 + 2 + 1 + 1 + 1 + footerLineCount + 1
-	available := m.height - fixed
+	available := m.height - frameChromeRows - footerLineCount - leftColumnFixedRows
 
 	pipelineWant := maxInt(1, stepCount)
 	if available-pipelineWant >= minPreviewRows {
@@ -131,6 +148,8 @@ func pipelineWindow(stepCount, visible, cursor int) (start, end int) {
 }
 
 func frameTop(width int, title string) string {
+	// 5: "╭─ " before the title, the space after it and the closing "╮".
+	title = ansi.Truncate(title, maxInt(width-5, 0), "…")
 	left := "╭─ " + title + " "
 	remaining := width - lipgloss.Width(left) - 1
 	if remaining < 0 {
@@ -354,12 +373,24 @@ func (m Model) footerLineCount() int {
 	return len(lines)
 }
 
+// footerCommandLines is raw truncated to one line, or, when the full
+// command is expanded, hard-wrapped across at most maxFooterCommandLines
+// lines, the last ending in "…" when even those cannot hold all of it.
 func (m Model) footerCommandLines(raw string) []string {
 	avail := m.innerWidth()
 	if !m.showFullCommand {
 		return []string{padOrTruncate(raw, avail)}
 	}
-	return wrapText(raw, avail)
+	lines := wrapText(raw, avail)
+	if limit := m.maxFooterCommandLines(); len(lines) > limit {
+		lines = lines[:limit]
+		last := []rune(lines[limit-1])
+		if len(last) >= avail {
+			last = last[:avail-1]
+		}
+		lines[limit-1] = string(last) + "…"
+	}
+	return lines
 }
 
 // wrapText hard-wraps s into chunks of at most width runes each (the

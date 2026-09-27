@@ -1,0 +1,128 @@
+package tui
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/seamus-sloan/lazyffmpeg/internal/app"
+	"github.com/seamus-sloan/lazyffmpeg/internal/picker"
+	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
+	"github.com/seamus-sloan/lazyffmpeg/internal/runner"
+)
+
+// assertFits fails t when view has more lines than height or any line
+// wider than width terminal cells.
+func assertFits(t *testing.T, name, view string, width, height int) {
+	t.Helper()
+	lines := strings.Split(view, "\n")
+	if len(lines) > height {
+		t.Errorf("%s: %d lines in a %dx%d terminal:\n%s", name, len(lines), width, height, view)
+		return
+	}
+	for i, l := range lines {
+		if w := ansi.StringWidth(l); w > width {
+			t.Errorf("%s: line %d is %d cells wide in a %dx%d terminal: %q", name, i+1, w, width, height, l)
+			return
+		}
+	}
+}
+
+// layoutSteps is allKindSteps with a very long raw-args step, so the
+// compiled command wraps across many footer lines once expanded.
+func layoutSteps() []pipeline.Step {
+	steps := allKindSteps()
+	long := strings.Repeat("y", 400)
+	steps[len(steps)-1] = pipeline.RawArgs{Text: long, Args: []string{long}}
+	return steps
+}
+
+// screensOf returns every screen the main editor can show for base: the
+// editor itself with either panel focused, the help and a step modal over
+// it, and each run-flow screen.
+func screensOf(base Model) map[string]Model {
+	screens := map[string]Model{"main": base}
+
+	mm, _ := base.Update(key("tab"))
+	pipelineFocus := mm.(Model)
+	pipelineFocus.pipelineCursor = maxInt(pipelineFocus.pipeline.Len()-1, 0)
+	screens["main, pipeline focus"] = pipelineFocus
+
+	mm, _ = base.Update(key("?"))
+	screens["help"] = mm.(Model)
+
+	modal := base
+	modal.focus = focusMenu
+	modal.menuCursor = 0
+	mm, _ = modal.Update(key("enter"))
+	screens["modal"] = mm.(Model)
+
+	tail := make([]string, 40)
+	for i := range tail {
+		tail[i] = fmt.Sprintf("ffmpeg stderr line %d", i+1)
+	}
+	longOut := "/out/" + strings.Repeat("o", 300) + ".mp4"
+	runs := map[string]runState{
+		"confirm": {phase: runConfirmOverwrite, job: runner.Job{Output: longOut}},
+		"running": {phase: runRunning, progress: runner.Progress{Percent: 42, Speed: 1.5, Elapsed: 3 * time.Second, ETA: 4 * time.Second}, pendingQuit: true},
+		"done":    {phase: runDone, result: runner.Result{Output: longOut, Size: 1_000_000}},
+		"error":   {phase: runError, err: &runner.ExitError{Code: 1, Tail: tail}},
+		"failure": {phase: runError, err: errors.New(strings.Repeat("bad ", 100))},
+	}
+	for name, rs := range runs {
+		m := base
+		m.run = rs
+		screens["run "+name] = m
+	}
+	return screens
+}
+
+func TestEveryScreenFitsTheTerminal(t *testing.T) {
+	sizes := [][2]int{{80, 24}, {100, 30}, {130, 40}}
+	inputs := []string{"clip.mov", "/videos/" + strings.Repeat("a very long file name ", 15) + ".mov"}
+	steps := layoutSteps()
+
+	for _, size := range sizes {
+		w, h := size[0], size[1]
+		for _, input := range inputs {
+			for n := 0; n <= len(steps); n++ {
+				for _, expanded := range []bool{false, true} {
+					s := testSession(pipeline.New(steps[:n]...))
+					s.Input = input
+					base := resized(New(s), w, h)
+					if expanded {
+						mm, _ := base.Update(key("c"))
+						base = mm.(Model)
+					}
+					for name, m := range screensOf(base) {
+						label := fmt.Sprintf("%dx%d, %d steps, c=%v, input %d chars, %s", w, h, n, expanded, len(input), name)
+						assertFits(t, label, viewText(m), w, h)
+					}
+				}
+			}
+		}
+
+		var entries []picker.Entry
+		for i := 0; i < 60; i++ {
+			entries = append(entries, picker.Entry{
+				Name: fmt.Sprintf("%s clip %02d.mp4", strings.Repeat("long ", 30), i),
+				Path: fmt.Sprintf("/dir/clip%02d.mp4", i), Size: int64(i) * 1000,
+			})
+		}
+		longDir := "/" + strings.Repeat("nested/", 30) + "dir"
+		for _, dir := range []string{"/dir", longDir} {
+			m := New(app.Session{Dir: dir})
+			mm, _ := m.Update(pickerListedMsg{dir: dir, entries: entries})
+			m = resized(mm.(Model), w, h)
+			m.picker.filtering = true
+			m.picker.status = strings.Repeat("probe failed ", 20)
+			assertFits(t, fmt.Sprintf("%dx%d picker in %d-char dir", w, h, len(dir)), viewText(m), w, h)
+			mm, _ = m.Update(key("?"))
+			assertFits(t, fmt.Sprintf("%dx%d picker help", w, h), viewText(mm.(Model)), w, h)
+		}
+	}
+}
