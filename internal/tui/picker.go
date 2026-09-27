@@ -79,7 +79,18 @@ func (m Model) handlePickerListed(msg pickerListedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.picker.status = ""
 	m.picker.entries = msg.entries
+	m.picker.cursor = m.pickerInitialCursor()
 	return m, nil
+}
+
+// pickerInitialCursor is the cursor row a fresh directory listing starts
+// on: the first real entry, skipping the ".." row, unless ".." is the
+// only row there is.
+func (m Model) pickerInitialCursor() int {
+	if m.pickerHasParentRow() && len(m.pickerVisibleEntries()) > 0 {
+		return 1
+	}
+	return 0
 }
 
 func (m Model) handlePickerProbed(msg pickerProbedMsg) (tea.Model, tea.Cmd) {

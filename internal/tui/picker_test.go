@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -95,20 +96,38 @@ func TestPickerEmptyListing(t *testing.T) {
 	}
 }
 
+func TestPickerInitialCursorSkipsParentRow(t *testing.T) {
+	m := New(pickerSession())
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: fakeEntries()})
+	m = mm.(Model)
+	if m.picker.cursor != 1 {
+		t.Errorf("initial cursor = %d, want 1 (the first real entry, past \"..\")", m.picker.cursor)
+	}
+}
+
+func TestPickerInitialCursorOnParentRowWhenItIsTheOnlyRow(t *testing.T) {
+	m := New(pickerSession())
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: nil})
+	m = mm.(Model)
+	if m.picker.cursor != 0 {
+		t.Errorf("cursor with no entries = %d, want 0 (\"..\" is the only row)", m.picker.cursor)
+	}
+}
+
 func TestPickerNavigationKeys(t *testing.T) {
 	m := New(pickerSession())
 	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: fakeEntries()})
 	m = mm.(Model)
 	m = resized(m, 100, 30)
 
-	if m.picker.cursor != 0 {
-		t.Fatalf("initial cursor = %d, want 0", m.picker.cursor)
+	if m.picker.cursor != 1 {
+		t.Fatalf("initial cursor = %d, want 1", m.picker.cursor)
 	}
 
 	mm, _ = m.Update(key("j"))
 	m = mm.(Model)
-	if m.picker.cursor != 1 {
-		t.Fatalf("after j, cursor = %d, want 1", m.picker.cursor)
+	if m.picker.cursor != 2 {
+		t.Fatalf("after j, cursor = %d, want 2", m.picker.cursor)
 	}
 
 	for i := 0; i < 10; i++ {
@@ -126,6 +145,64 @@ func TestPickerNavigationKeys(t *testing.T) {
 	}
 }
 
+func TestPickerViewFitsHeightWithManyEntries(t *testing.T) {
+	var es []picker.Entry
+	for i := 0; i < 60; i++ {
+		es = append(es, picker.Entry{Name: fmt.Sprintf("clip-%02d.mp4", i), Path: fmt.Sprintf("/dir/clip-%02d.mp4", i)})
+	}
+	m := New(pickerSession())
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: es})
+	m = mm.(Model)
+	m = resized(m, 100, 30)
+
+	out := viewText(m)
+	if h := strings.Count(out, "\n") + 1; h > 30 {
+		t.Fatalf("picker view is %d lines tall in a 30-line terminal, want <= 30:\n%s", h, out)
+	}
+
+	// Moving the cursor down past the visible window must scroll the
+	// list so the last entry stays visible.
+	for i := 0; i < 65; i++ {
+		mm, _ = m.Update(key("j"))
+		m = mm.(Model)
+	}
+	out = viewText(m)
+	if !strings.Contains(out, "clip-59.mp4") {
+		t.Errorf("last entry not visible after scrolling to it, got:\n%s", out)
+	}
+	if h := strings.Count(out, "\n") + 1; h > 30 {
+		t.Errorf("picker view is %d lines tall after scrolling, want <= 30:\n%s", h, out)
+	}
+}
+
+func TestPickerColumnsAlignRegardlessOfNameLength(t *testing.T) {
+	entries := []picker.Entry{
+		{Name: "short.mp4", Path: "/dir/short.mp4", Size: 100, ModTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{Name: strings.Repeat("x", 80) + ".mp4", Path: "/dir/long.mp4", Size: 200, ModTime: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)},
+	}
+	m := New(pickerSession())
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: entries})
+	m = mm.(Model)
+	m = resized(m, 100, 30)
+
+	out := viewText(m)
+	col1, col2 := -1, -1
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "100 B") {
+			col1 = strings.Index(l, "100 B")
+		}
+		if strings.Contains(l, "200 B") {
+			col2 = strings.Index(l, "200 B")
+		}
+	}
+	if col1 == -1 || col2 == -1 {
+		t.Fatalf("size column not found in view, got:\n%s", out)
+	}
+	if col1 != col2 {
+		t.Errorf("size columns misaligned: %d vs %d, got:\n%s", col1, col2, out)
+	}
+}
+
 func TestPickerEnterOnDirectoryOpensIt(t *testing.T) {
 	var listedDirs []string
 	m := New(pickerSession(), WithLister(func(dir string) ([]picker.Entry, error) {
@@ -139,10 +216,7 @@ func TestPickerEnterOnDirectoryOpensIt(t *testing.T) {
 	m = mm.(Model)
 	m = resized(m, 100, 30)
 
-	// Move onto "sub" (row 1: .. is row 0).
-	mm, _ = m.Update(key("j"))
-	m = mm.(Model)
-
+	// The cursor already starts on "sub" (row 1: .. is row 0, skipped).
 	mm, cmd := m.Update(key("enter"))
 	m = mm.(Model)
 	if cmd == nil {

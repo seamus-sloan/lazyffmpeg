@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/seamus-sloan/lazyffmpeg/internal/picker"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/units"
 )
@@ -446,7 +447,7 @@ func (m Model) renderPickerFrame() string {
 }
 
 func (m Model) pickerBodyLines() []string {
-	var lines []string
+	var header []string
 
 	entries := m.pickerVisibleEntries()
 	usable := 0
@@ -459,48 +460,77 @@ func (m Model) pickerBodyLines() []string {
 	if usable == 1 {
 		noun = "file"
 	}
-	lines = append(lines, fmt.Sprintf("%d usable %s", usable, noun))
+	header = append(header, fmt.Sprintf("%d usable %s", usable, noun))
 
 	if m.picker.filtering || m.picker.filter != "" {
-		lines = append(lines, "filter: "+m.picker.filter)
+		header = append(header, "filter: "+m.picker.filter)
 	}
-	lines = append(lines, "")
+	header = append(header, "")
 
 	if m.picker.status != "" {
-		lines = append(lines, errorStyle.Render(m.picker.status))
-		lines = append(lines, "")
+		header = append(header, errorStyle.Render(m.picker.status))
+		header = append(header, "")
 	}
 
 	hasParent := m.pickerHasParentRow()
 	if len(entries) == 0 {
-		lines = append(lines, fmt.Sprintf("No video files in %s", m.picker.dir))
+		lines := append(header, fmt.Sprintf("No video files in %s", m.picker.dir))
 		if hasParent {
 			lines = append(lines, "backspace: go up a directory")
 		}
 		return lines
 	}
 
+	rows := m.pickerRowLines(entries, hasParent)
+	maxRows := m.height - 2 - len(header)
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	start, end := pipelineWindow(len(rows), maxRows, m.picker.cursor)
+
+	return append(header, rows[start:end]...)
+}
+
+// pickerNameWidth is the fixed width the name column is padded/truncated
+// to, so the size and date columns that follow line up regardless of how
+// long any one entry's name is.
+func (m Model) pickerNameWidth() int {
+	// 1 (space) + 10 (size) + 2 (spaces) + 10 (date) trail the name.
+	w := m.innerWidth() - 1 - 10 - 2 - 10
+	if w < 10 {
+		w = 10
+	}
+	return w
+}
+
+// pickerRowLines renders every row (the ".." parent row, if any, then one
+// row per entry), independent of which rows are actually visible.
+func (m Model) pickerRowLines(entries []picker.Entry, hasParent bool) []string {
+	nameWidth := m.pickerNameWidth()
+	var lines []string
+
 	row := 0
-	if hasParent {
+	prefixFor := func() string {
 		prefix := "  "
 		if m.picker.cursor == row {
 			prefix = "> "
 		}
-		lines = append(lines, prefix+"..")
 		row++
+		return prefix
+	}
+
+	if hasParent {
+		lines = append(lines, prefixFor()+"..")
 	}
 	for _, e := range entries {
-		prefix := "  "
-		if m.picker.cursor == row {
-			prefix = "> "
-		}
+		prefix := prefixFor()
 		if e.IsDir {
 			lines = append(lines, fmt.Sprintf("%s%s/", prefix, e.Name))
 		} else {
-			lines = append(lines, fmt.Sprintf("%s%-40s %10s  %s", prefix, e.Name,
+			name := padOrTruncate(e.Name, nameWidth)
+			lines = append(lines, fmt.Sprintf("%s%s %10s  %s", prefix, name,
 				units.FormatSize(e.Size), e.ModTime.Format("2006-01-02")))
 		}
-		row++
 	}
 	return lines
 }
