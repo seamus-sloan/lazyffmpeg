@@ -87,7 +87,8 @@ type parser struct {
 	hasScale bool
 	hasSides bool
 
-	trim pipeline.Trim
+	trim    pipeline.Trim
+	hasTrim bool
 
 	hasCRF    bool
 	hasTarget bool
@@ -168,6 +169,12 @@ func Parse(args []string) (Config, error) {
 	}
 	if len(positionals) == 1 {
 		pr.cfg.Input = positionals[0]
+	}
+
+	if pr.hasTrim {
+		if err := pr.trim.Validate(); err != nil {
+			return Config{}, usageErr("invalid trim: %v", err)
+		}
 	}
 
 	if pr.stretchSeen {
@@ -272,7 +279,7 @@ func (pr *parser) applyValue(name, val string) error {
 			return usageErr("invalid value for --trim-start: %q", val)
 		}
 		pr.trim.Start = t
-		return pr.commitTrim()
+		pr.commitTrim()
 
 	case "--trim-end":
 		t, err := units.ParseTime(val)
@@ -280,7 +287,7 @@ func (pr *parser) applyValue(name, val string) error {
 			return usageErr("invalid value for --trim-end: %q", val)
 		}
 		pr.trim.End = t
-		return pr.commitTrim()
+		pr.commitTrim()
 
 	case "--fps":
 		fr, err := pipeline.ParseFPS(val)
@@ -365,11 +372,12 @@ func (pr *parser) commitResolution() error {
 	return nil
 }
 
-func (pr *parser) commitTrim() error {
-	if err := pr.trim.Validate(); err != nil {
-		return usageErr("invalid trim: %v", err)
-	}
+// commitTrim records the merged --trim-start/--trim-end values at the
+// position of the first trim flag. They are validated together once the
+// whole command line is read (see Parse), because either flag alone can be
+// invalid on its own ("--trim-start 0") yet fine once merged.
+func (pr *parser) commitTrim() {
+	pr.hasTrim = true
 	pr.pl = pr.pl.Upsert(pr.trim)
 	pr.cfg.HasSteps = true
-	return nil
 }

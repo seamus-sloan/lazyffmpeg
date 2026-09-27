@@ -90,6 +90,48 @@ func TestParseTrimStartEndMerge(t *testing.T) {
 	}
 }
 
+func TestParseTrimZeroStartWithEndInEitherOrder(t *testing.T) {
+	orders := [][]string{
+		{"in.mov", "--trim-start", "0", "--trim-end", "20"},
+		{"in.mov", "--trim-end", "20", "--trim-start", "0"},
+	}
+	for _, args := range orders {
+		cfg, err := Parse(args)
+		if err != nil {
+			t.Errorf("Parse(%q): %v", args, err)
+			continue
+		}
+		trim := mustFind(t, cfg.Pipeline, pipeline.KindTrim).(pipeline.Trim)
+		if trim.Start != 0 || trim.End != 20 {
+			t.Errorf("Parse(%q) Trim = %+v, want {0,20}", args, trim)
+		}
+	}
+}
+
+func TestParseTrimKeepsPositionOfFirstTrimFlag(t *testing.T) {
+	cfg, err := Parse([]string{"in.mov", "--trim-start", "0", "--speed", "2", "--trim-end", "20"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := kindsOf(cfg.Pipeline.Steps())
+	want := []pipeline.Kind{pipeline.KindTrim, pipeline.KindSpeed}
+	if !kindsEqual(got, want) {
+		t.Errorf("step kinds = %v, want %v (trim at first position)", got, want)
+	}
+}
+
+func TestParseTrimStartZeroAloneErrors(t *testing.T) {
+	if _, err := Parse([]string{"in.mov", "--trim-start", "0"}); !errors.Is(err, ErrUsage) {
+		t.Errorf("err = %v, want ErrUsage", err)
+	}
+}
+
+func TestParseTrimEndBeforeStartErrors(t *testing.T) {
+	if _, err := Parse([]string{"in.mov", "--trim-end", "5", "--trim-start", "10"}); !errors.Is(err, ErrUsage) {
+		t.Errorf("err = %v, want ErrUsage", err)
+	}
+}
+
 func TestParseAllStepFlags(t *testing.T) {
 	cfg, err := Parse([]string{
 		"in.mov",
