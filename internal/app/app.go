@@ -39,21 +39,23 @@ var (
 	// extension: in-place never changes the container.
 	ErrInPlaceContainerMismatch = errors.New("in-place cannot change the container")
 	// ErrInPlaceUnsupportedExt is returned when --in-place is used on an
-	// input whose extension is not one lazyff can write natively (and
-	// there is no Container step to pick one that matches).
-	ErrInPlaceUnsupportedExt = errors.New("in-place needs an explicit output; use -o or --container")
+	// input whose format lazyff cannot write back: an extension it does
+	// not write at all, or an .m4v input with an encoder .m4v cannot hold.
+	ErrInPlaceUnsupportedExt = errors.New("in-place cannot write this format")
 )
 
 // CheckInPlace reports whether replacing input in place is safe for p: a
 // Container step's format must match input's own extension (in-place never
 // changes the container, it only ever writes back to input's own path),
-// and when there is no Container step, input's own extension must be one
-// the compiler can write without one. It is the single rule the headless
-// path, --dry-run and the TUI's run confirmation all enforce, so an
-// --in-place run never silently writes a different container over the
-// original file.
+// and when there is no Container step, input's own extension must be able
+// to hold p's encode (pipeline.CanKeepExt). It is the single rule the
+// headless path, --dry-run and the TUI's run confirmation all enforce, so
+// an --in-place run never silently writes a different container over the
+// original file. An unsupported format's error suggests writing a new
+// .mp4 next to the input with -o instead.
 func CheckInPlace(input string, p pipeline.Pipeline) error {
-	inputExt := strings.ToLower(filepath.Ext(input))
+	ext := filepath.Ext(input)
+	inputExt := strings.ToLower(ext)
 	if c, ok := p.Find(pipeline.KindContainer); ok {
 		containerExt := "." + string(c.(pipeline.Container).Format)
 		if !strings.EqualFold(containerExt, inputExt) {
@@ -61,8 +63,16 @@ func CheckInPlace(input string, p pipeline.Pipeline) error {
 		}
 		return nil
 	}
-	if !pipeline.KnownContainerExt(inputExt) {
-		return fmt.Errorf("%w (input is %s)", ErrInPlaceUnsupportedExt, inputExt)
+	if !pipeline.CanKeepExt(ext, p) {
+		what := inputExt
+		if what == "" {
+			what = "no extension"
+		}
+		if e, ok := p.Find(pipeline.KindEncoder); ok {
+			what += " with " + string(e.(pipeline.Encoder).Codec)
+		}
+		suggestion := pipeline.QuoteCommand([]string{strings.TrimSuffix(input, ext) + ".mp4"})
+		return fmt.Errorf("%w (%s); write a new file with -o %s instead", ErrInPlaceUnsupportedExt, what, suggestion)
 	}
 	return nil
 }

@@ -40,6 +40,34 @@ func TestDefaultOutputPathUnsupportedExtensionFallsBackToMP4(t *testing.T) {
 	}
 }
 
+func TestDefaultOutputPathKeepsM4VOnlyForH264OrCopy(t *testing.T) {
+	cases := []struct {
+		input string
+		codec Codec // "" = no Encoder step
+		want  string
+	}{
+		{"/v/clip.m4v", "", "/v/clip (edited).m4v"},
+		{"/v/clip.m4v", CodecH264, "/v/clip (edited).m4v"},
+		{"/v/clip.m4v", CodecH264HW, "/v/clip (edited).m4v"},
+		{"/v/clip.m4v", CodecCopy, "/v/clip (edited).m4v"},
+		{"/v/clip.m4v", CodecH265, "/v/clip (edited).mp4"},
+		{"/v/clip.m4v", CodecH265HW, "/v/clip (edited).mp4"},
+		{"/v/clip.m4v", CodecAV1, "/v/clip (edited).mp4"},
+		{"/v/clip.M4V", CodecVP9, "/v/clip (edited).mp4"},
+		{"/v/clip.mp4", CodecH265, "/v/clip (edited).mp4"},
+		{"/v/clip.mov", CodecAV1, "/v/clip (edited).mov"},
+	}
+	for _, c := range cases {
+		p := New()
+		if c.codec != "" {
+			p = New(Encoder{Codec: c.codec})
+		}
+		if got := DefaultOutputPath(c.input, p); got != c.want {
+			t.Errorf("DefaultOutputPath(%q, %q) = %q, want %q", c.input, c.codec, got, c.want)
+		}
+	}
+}
+
 func TestQuoteCommand(t *testing.T) {
 	argv := []string{"ffmpeg", "-i", "a b.mov", "out.mp4", ""}
 	got := QuoteCommand(argv)

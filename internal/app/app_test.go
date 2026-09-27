@@ -261,11 +261,85 @@ func TestMainInPlaceUnsupportedExtensionErrors(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(errOut.String(), "-o") || !strings.Contains(errOut.String(), "--container") {
-		t.Errorf("stderr = %q, want it to suggest -o or --container", errOut.String())
+	wantSuggestion := "-o " + filepath.Join(filepath.Dir(in), "clip.mp4")
+	if !strings.Contains(errOut.String(), wantSuggestion) {
+		t.Errorf("stderr = %q, want it to suggest %q", errOut.String(), wantSuggestion)
+	}
+	if strings.Contains(errOut.String(), "--container") {
+		t.Errorf("stderr = %q, should not suggest --container (it cannot help in place)", errOut.String())
 	}
 	if _, err := os.Stat(in); err != nil {
 		t.Errorf("input should be untouched: %v", err)
+	}
+}
+
+func TestMainM4VInputWithH265WritesMP4(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Name: "clip.m4v", Width: 320, Height: 240, Seconds: 1})
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--encoder", "h265"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0, stderr=%s", code, errOut.String())
+	}
+	wantOut := filepath.Join(filepath.Dir(in), "clip (edited).mp4")
+	if _, err := os.Stat(wantOut); err != nil {
+		t.Errorf("output not created at %q: %v (stdout=%q)", wantOut, err, out.String())
+	}
+}
+
+func TestMainInPlaceM4VWithH265Errors(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Name: "clip.m4v", Width: 320, Height: 240, Seconds: 1})
+	before, err := os.ReadFile(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--encoder", "h265", "--in-place"})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !errors.Is(app.CheckInPlace(in, pipeline.New(pipeline.Encoder{Codec: pipeline.CodecH265})), app.ErrInPlaceUnsupportedExt) {
+		t.Errorf("CheckInPlace(.m4v, h265) should be ErrInPlaceUnsupportedExt")
+	}
+	wantSuggestion := "-o " + filepath.Join(filepath.Dir(in), "clip.mp4")
+	if !strings.Contains(errOut.String(), wantSuggestion) {
+		t.Errorf("stderr = %q, want it to suggest %q", errOut.String(), wantSuggestion)
+	}
+	after, err := os.ReadFile(in)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Errorf("input should be untouched (err=%v)", err)
+	}
+}
+
+func TestCheckInPlace(t *testing.T) {
+	h264 := pipeline.New(pipeline.Encoder{Codec: pipeline.CodecH264})
+	cases := []struct {
+		name  string
+		input string
+		p     pipeline.Pipeline
+		want  error
+	}{
+		{"mp4 default encoder", "/v/clip.mp4", pipeline.New(), nil},
+		{"m4v default encoder", "/v/clip.m4v", pipeline.New(), nil},
+		{"m4v h264", "/v/clip.m4v", h264, nil},
+		{"m4v h264 hardware", "/v/clip.m4v", pipeline.New(pipeline.Encoder{Codec: pipeline.CodecH264HW}), nil},
+		{"m4v copy", "/v/clip.m4v", pipeline.New(pipeline.Encoder{Codec: pipeline.CodecCopy}), nil},
+		{"m4v h265", "/v/clip.m4v", pipeline.New(pipeline.Encoder{Codec: pipeline.CodecH265}), app.ErrInPlaceUnsupportedExt},
+		{"m4v av1", "/v/clip.M4V", pipeline.New(pipeline.Encoder{Codec: pipeline.CodecAV1}), app.ErrInPlaceUnsupportedExt},
+		{"gif", "/v/clip.gif", pipeline.New(), app.ErrInPlaceUnsupportedExt},
+		{"mov with mkv container", "/v/clip.mov", pipeline.New(pipeline.Container{Format: pipeline.FormatMKV}), app.ErrInPlaceContainerMismatch},
+	}
+	for _, c := range cases {
+		err := app.CheckInPlace(c.input, c.p)
+		if c.want == nil && err != nil {
+			t.Errorf("%s: CheckInPlace = %v, want nil", c.name, err)
+		}
+		if c.want != nil && !errors.Is(err, c.want) {
+			t.Errorf("%s: CheckInPlace = %v, want %v", c.name, err, c.want)
+		}
 	}
 }
 
