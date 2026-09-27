@@ -63,12 +63,15 @@ Other flags: `-o PATH`, `--in-place`, `--force`, `--tui`, `--dry-run`,
 
 ### Output file rules
 
-Default output is `<name> (edited).<ext>` next to the input; `<ext>` is
-the container step's extension when set, else the input's own. `-o`
-overrides it; `--in-place` encodes to a temp file in the same directory
-and atomically replaces the input only after ffmpeg succeeds. An existing
-output is never overwritten silently: headless fails unless `--force`,
-the TUI asks first.
+Default output is `<name> (edited).<ext>` next to the input. `<ext>` is
+the Container step's extension when set; else the input's own when it is
+`mp4`, `m4v`, `mov`, `mkv` or `webm` (`m4v` only for H.264 or `copy`,
+which is all it can hold); else `.mp4`. `-o` overrides it. `--in-place`
+encodes to a temp file in the same directory and atomically replaces the
+input only after ffmpeg succeeds; it needs a format it can write back
+(one of those extensions, with an encoder it can hold), otherwise write a
+new file with `-o <name>.mp4`. An existing output is never overwritten
+silently: headless fails unless `--force`, the TUI asks first.
 
 ## Keybindings
 
