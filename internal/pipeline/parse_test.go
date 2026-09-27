@@ -283,6 +283,8 @@ func TestSplitArgs(t *testing.T) {
 		{`'literal \n text'`, []string{`literal \n text`}},
 		{`"a\"b\\c"`, []string{`a"b\c`}},
 		{`a\ b`, []string{"a b"}},
+		{`-metadata "comment=a\:b"`, []string{"-metadata", `comment=a\:b`}},
+		{`"C:\temp"`, []string{`C:\temp`}},
 	}
 	for _, c := range cases {
 		got, err := SplitArgs(c.in)

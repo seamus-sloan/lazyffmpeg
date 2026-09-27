@@ -215,15 +215,18 @@ func ParseContainer(s string) (Container, error) {
 }
 
 // SplitArgs splits a raw-args string into argv elements, honoring single
-// quotes (fully literal), double quotes (with \" and \\ escapes), and
-// backslash escapes outside quotes. It never invokes a shell.
+// quotes (fully literal), double quotes (where backslash escapes only `"`
+// and `\`; any other `\x` keeps its backslash), and backslash escapes
+// outside quotes (which always consume the backslash). It never invokes a
+// shell.
 func SplitArgs(s string) ([]string, error) {
 	var args []string
 	var cur strings.Builder
 	hasCur := false
 	inSingle := false
 	inDouble := false
-	escaped := false
+	escaped := false         // backslash seen outside quotes
+	escapedInDouble := false // backslash seen inside double quotes
 
 	flush := func() {
 		if hasCur {
@@ -239,6 +242,13 @@ func SplitArgs(s string) ([]string, error) {
 			cur.WriteRune(r)
 			hasCur = true
 			escaped = false
+		case escapedInDouble:
+			if r != '"' && r != '\\' {
+				cur.WriteRune('\\')
+			}
+			cur.WriteRune(r)
+			hasCur = true
+			escapedInDouble = false
 		case inSingle:
 			if r == '\'' {
 				inSingle = false
@@ -250,7 +260,7 @@ func SplitArgs(s string) ([]string, error) {
 			case '"':
 				inDouble = false
 			case '\\':
-				escaped = true
+				escapedInDouble = true
 			default:
 				cur.WriteRune(r)
 			}
@@ -273,7 +283,7 @@ func SplitArgs(s string) ([]string, error) {
 		}
 	}
 
-	if escaped {
+	if escaped || escapedInDouble {
 		return nil, fmt.Errorf("%w: unterminated escape in %q", ErrInvalidStep, s)
 	}
 	if inSingle || inDouble {
