@@ -216,6 +216,21 @@ func sideLine(width int, content string) string {
 	return "│" + c + "│"
 }
 
+// oneLine collapses text drawn into a single row (an error or status
+// message) to its last non-empty line, trimmed: errors from ffmpeg and
+// ffprobe carry their stderr, many lines long, and the last is the one
+// that says what went wrong. Every frame row then truncates it to the
+// width with "…" (see padOrTruncate).
+func oneLine(text string) string {
+	lines := strings.Split(text, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if l := strings.TrimSpace(lines[i]); l != "" {
+			return l
+		}
+	}
+	return ""
+}
+
 // padOrTruncate pads s with trailing spaces to width w, or truncates it
 // (ANSI- and wide-character-aware, with a trailing "…") when it is wider.
 func padOrTruncate(s string, w int) string {
@@ -346,9 +361,9 @@ func (m Model) footerLines() ([]string, string) {
 
 	var raw string
 	if m.notice != "" {
-		raw = m.notice
+		raw = oneLine(m.notice)
 	} else if argv, err := pipeline.Compile(m.session.Info, m.pipeline, opts); err != nil {
-		raw = err.Error()
+		raw = oneLine(err.Error())
 	} else {
 		raw = pipeline.QuoteCommand(argv)
 	}
@@ -486,7 +501,7 @@ func (m Model) pickerBodyLines() []string {
 	header = append(header, "")
 
 	if m.picker.status != "" {
-		header = append(header, errorStyle.Render(m.picker.status))
+		header = append(header, errorStyle.Render(oneLine(m.picker.status)))
 		header = append(header, "")
 	}
 

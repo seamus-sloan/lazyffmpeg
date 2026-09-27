@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/units"
@@ -373,7 +374,9 @@ func (m Model) modalView() string {
 		}
 	}
 	if ms.err != "" {
-		b.WriteString("\n" + errorStyle.Render(ms.err) + "\n")
+		// 6: the modal box's border and horizontal padding.
+		msg := ansi.Truncate(oneLine(ms.err), maxInt(m.width-6, 1), "…")
+		b.WriteString("\n" + errorStyle.Render(msg) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

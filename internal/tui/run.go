@@ -317,7 +317,7 @@ func (m Model) runBodyLines() []string {
 		if m.session.InPlace {
 			prompt = fmt.Sprintf("Replace original %s? (y/n)", rs.job.Output)
 		}
-		return []string{prompt}
+		return []string{oneLine(prompt)}
 
 	case runRunning:
 		width := m.innerWidth() - 2
@@ -348,7 +348,7 @@ func (m Model) runBodyLines() []string {
 			return []string{"Canceled", "", "press any key to continue"}
 		}
 		return []string{
-			fmt.Sprintf("Wrote %s", rs.result.Output),
+			oneLine(fmt.Sprintf("Wrote %s", rs.result.Output)),
 			units.FormatSizeChange(rs.inputSize, rs.result.Size),
 			"",
 			"press any key to continue",
@@ -357,7 +357,7 @@ func (m Model) runBodyLines() []string {
 	case runError:
 		var exitErr *runner.ExitError
 		if !errors.As(rs.err, &exitErr) {
-			return []string{"Error: " + rs.err.Error(), "", "press any key to continue"}
+			return []string{"Error: " + oneLine(rs.err.Error()), "", "press any key to continue"}
 		}
 		// Show as much of the end of ffmpeg's stderr as fits between the
 		// heading and the two closing lines inside the frame's borders.

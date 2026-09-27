@@ -602,6 +602,26 @@ func TestRunErrorViewShowsTheEndOfALongTailAt80x24(t *testing.T) {
 	}
 }
 
+func TestRunErrorViewShowsAMultiLineErrorsLastLine(t *testing.T) {
+	dir := t.TempDir()
+	fake := func(ctx context.Context, job runner.Job, onProgress func(runner.Progress)) (runner.Result, error) {
+		return runner.Result{}, errors.New("runner: rename output: noise\n  permission denied  \n")
+	}
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo(), Output: filepath.Join(dir, "out.mp4")}
+	m := resized(New(s, WithRunner(fake)), 100, 30)
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	mm, _ = m.Update(cmd())
+	out := viewText(mm.(Model))
+
+	if !strings.Contains(out, "│Error: permission denied ") {
+		t.Errorf("run error view does not show the error's last line on one row:\n%s", out)
+	}
+	if strings.Contains(out, "noise") {
+		t.Errorf("run error view kept the error's earlier lines:\n%s", out)
+	}
+}
+
 func TestEscWhileRunningPromptsCancel(t *testing.T) {
 	release := make(chan struct{})
 	dir := t.TempDir()

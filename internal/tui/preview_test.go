@@ -381,6 +381,22 @@ func TestRenderErrorShowsOneLine(t *testing.T) {
 	}
 }
 
+func TestMultiLineRenderErrorShowsItsLastLineOnOneRow(t *testing.T) {
+	fn, _ := fakeRenderer("", errors.New("ffmpeg: exit status 1: noise\nmore noise\n  clip.mov: No such file or directory  \n\n"))
+	m := step(t, New(testSession(pipeline.New()), WithRenderer(fn, true)), tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	out := viewText(m)
+	if !strings.Contains(out, "│clip.mov: No such file or directory ") {
+		t.Errorf("preview box does not show the error's last line, trimmed, on one row:\n%s", out)
+	}
+	if strings.Contains(out, "noise") {
+		t.Errorf("preview box kept the error's earlier lines:\n%s", out)
+	}
+	if h := strings.Count(out, "\n") + 1; h > 30 {
+		t.Errorf("view is %d lines tall in a 30-line terminal", h)
+	}
+}
+
 func TestResizeRequestsFreshRender(t *testing.T) {
 	fn, reqs := fakeRenderer("F", nil)
 	m := New(testSession(pipeline.New()), WithRenderer(fn, true))

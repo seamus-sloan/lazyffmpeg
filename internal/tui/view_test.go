@@ -15,8 +15,10 @@ import (
 	"github.com/seamus-sloan/lazyffmpeg/internal/runner"
 )
 
-// assertFits fails t when view has more lines than height or any line
-// wider than width terminal cells.
+// assertFits fails t when view has more lines than height, any line
+// wider than width terminal cells, or any line that is not a row of the
+// frame (starting and ending on its border), as happens when text holding
+// a newline is drawn into what should be a single row.
 func assertFits(t *testing.T, name, view string, width, height int) {
 	t.Helper()
 	lines := strings.Split(view, "\n")
@@ -27,6 +29,11 @@ func assertFits(t *testing.T, name, view string, width, height int) {
 	for i, l := range lines {
 		if w := ansi.StringWidth(l); w > width {
 			t.Errorf("%s: line %d is %d cells wide in a %dx%d terminal: %q", name, i+1, w, width, height, l)
+			return
+		}
+		r := []rune(l)
+		if len(r) == 0 || !strings.ContainsRune("╭│╰", r[0]) || !strings.ContainsRune("╮│╯", r[len(r)-1]) {
+			t.Errorf("%s: line %d is not a frame row: %q", name, i+1, l)
 			return
 		}
 	}
@@ -41,11 +48,23 @@ func layoutSteps() []pipeline.Step {
 	return steps
 }
 
+// multiLineError is error text the way ffmpeg and ffprobe report it: many
+// lines of stderr, long ones among them, ending in the line that matters
+// and a trailing blank line.
+func multiLineError() string {
+	return strings.Repeat("ffprobe: noise from stderr that is long enough to need truncating on its own\n", 30) +
+		"clip.mov: Invalid data found when processing input\n\n"
+}
+
 // screensOf returns every screen the main editor can show for base: the
 // editor itself with either panel focused, the help and a step modal over
-// it, and each run-flow screen.
+// it, and each run-flow screen, including ones showing multi-line errors.
 func screensOf(base Model) map[string]Model {
 	screens := map[string]Model{"main": base}
+
+	previewErr := base
+	previewErr.preview.frameErr = multiLineError()
+	screens["main, multi-line preview error"] = previewErr
 
 	mm, _ := base.Update(key("tab"))
 	pipelineFocus := mm.(Model)
@@ -60,6 +79,11 @@ func screensOf(base Model) map[string]Model {
 	modal.menuCursor = 0
 	mm, _ = modal.Update(key("enter"))
 	screens["modal"] = mm.(Model)
+	modalErr := mm.(Model)
+	ms := *modalErr.modal
+	ms.err = multiLineError()
+	modalErr.modal = &ms
+	screens["modal, multi-line error"] = modalErr
 
 	tail := make([]string, 40)
 	for i := range tail {
@@ -67,11 +91,14 @@ func screensOf(base Model) map[string]Model {
 	}
 	longOut := "/out/" + strings.Repeat("o", 300) + ".mp4"
 	runs := map[string]runState{
-		"confirm": {phase: runConfirmOverwrite, job: runner.Job{Output: longOut}},
-		"running": {phase: runRunning, progress: runner.Progress{Percent: 42, Speed: 1.5, Elapsed: 3 * time.Second, ETA: 4 * time.Second}, pendingQuit: true},
-		"done":    {phase: runDone, result: runner.Result{Output: longOut, Size: 1_000_000}},
-		"error":   {phase: runError, err: &runner.ExitError{Code: 1, Tail: tail}},
-		"failure": {phase: runError, err: errors.New(strings.Repeat("bad ", 100))},
+		"confirm":            {phase: runConfirmOverwrite, job: runner.Job{Output: longOut}},
+		"running":            {phase: runRunning, progress: runner.Progress{Percent: 42, Speed: 1.5, Elapsed: 3 * time.Second, ETA: 4 * time.Second}, pendingQuit: true},
+		"done":               {phase: runDone, result: runner.Result{Output: longOut, Size: 1_000_000}},
+		"error":              {phase: runError, err: &runner.ExitError{Code: 1, Tail: tail}},
+		"failure":            {phase: runError, err: errors.New(strings.Repeat("bad ", 100))},
+		"multi-line failure": {phase: runError, err: errors.New(multiLineError())},
+		"multi-line confirm": {phase: runConfirmOverwrite, job: runner.Job{Output: "/out/odd\nname\n.mp4"}},
+		"multi-line done":    {phase: runDone, result: runner.Result{Output: "/out/odd\nname\n.mp4", Size: 1}},
 	}
 	for name, rs := range runs {
 		m := base
@@ -121,6 +148,8 @@ func TestEveryScreenFitsTheTerminal(t *testing.T) {
 			m.picker.filtering = true
 			m.picker.status = strings.Repeat("probe failed ", 20)
 			assertFits(t, fmt.Sprintf("%dx%d picker in %d-char dir", w, h, len(dir)), viewText(m), w, h)
+			m.picker.status = multiLineError()
+			assertFits(t, fmt.Sprintf("%dx%d picker with a multi-line probe error", w, h), viewText(m), w, h)
 			mm, _ = m.Update(key("?"))
 			assertFits(t, fmt.Sprintf("%dx%d picker help", w, h), viewText(mm.(Model)), w, h)
 		}

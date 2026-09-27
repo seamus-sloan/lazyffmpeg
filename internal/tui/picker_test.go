@@ -437,6 +437,22 @@ func TestPickerEnterOnFileProbesAsynchronously(t *testing.T) {
 	}
 }
 
+func TestPickerMultiLineProbeErrorShowsItsLastLineOnOneRow(t *testing.T) {
+	m := New(pickerSession())
+	mm, _ := m.Update(pickerListedMsg{dir: "/dir", entries: fakeEntries()})
+	m = resized(mm.(Model), 100, 30)
+	mm, _ = m.Update(pickerProbedMsg{err: errors.New("ffprobe: exit status 1: noise\nmore noise\n  clip.mp4: Invalid data found  \n\n")})
+	m = mm.(Model)
+
+	out := viewText(m)
+	if !strings.Contains(out, "│clip.mp4: Invalid data found ") {
+		t.Errorf("picker status is not the error's last line, trimmed, on one row:\n%s", out)
+	}
+	if strings.Contains(out, "noise") {
+		t.Errorf("picker status kept the error's earlier lines:\n%s", out)
+	}
+}
+
 func TestPickerProbeFailureStaysOnPicker(t *testing.T) {
 	wantErr := errors.New("ffprobe: boom")
 	m := New(pickerSession(), WithProber(func(ctx context.Context, path string) (probe.Info, error) {

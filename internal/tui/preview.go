@@ -321,7 +321,7 @@ func (m Model) previewBoxLines() []string {
 	case !m.rendererAvailable:
 		content = []string{"install chafa for preview"}
 	case m.preview.frameErr != "":
-		content = []string{m.preview.frameErr}
+		content = []string{oneLine(m.preview.frameErr)}
 	case m.preview.frame != "":
 		content = strings.Split(m.preview.frame, "\n")
 	}
