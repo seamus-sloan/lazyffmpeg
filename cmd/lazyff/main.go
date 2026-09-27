@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
+	"github.com/seamus-sloan/lazyffmpeg/internal/tui"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
 		StderrIsTTY: stderrIsTTY,
-		LaunchTUI:   nil, // wired once the TUI package exists
+		LaunchTUI:   tui.Run,
 	}
 
 	os.Exit(a.Main(ctx, os.Args[1:]))
