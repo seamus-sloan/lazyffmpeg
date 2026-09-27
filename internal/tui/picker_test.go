@@ -378,7 +378,7 @@ func TestPickerFilterEditsPutTheCursorOnTheFirstMatch(t *testing.T) {
 }
 
 func TestPickerFilterWithNoMatchesPutsTheCursorOnParent(t *testing.T) {
-	m := filteringPicker(t, "zzz")
+	m := filteringPicker(t, "no-such-clip")
 	if m.picker.cursor != 0 {
 		t.Errorf("cursor with nothing matching = %d, want 0 (\"..\" is the only row)", m.picker.cursor)
 	}
