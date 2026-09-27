@@ -1,6 +1,4 @@
-// Package picker lists a directory's usable video files and
-// sub-directories for lazyff's file picker: no other project's file
-// association tables are consulted, just a fixed extension allow-list.
+// Package picker lists a directory's usable video files and sub-directories.
 package picker
 
 import (

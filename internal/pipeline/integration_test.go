@@ -131,9 +131,9 @@ func TestIntegrationSpeedAndTrim(t *testing.T) {
 	}
 }
 
-// TestIntegrationResolutionFitInsideBox verifies the addendum's fit-inside
-// -box behaviour: the result fits inside the box, keeps aspect within 1%,
-// and both sides come out even.
+// TestIntegrationResolutionFitInsideBox verifies the fit-inside-box
+// behaviour: the result fits inside the box, keeps aspect within 1%, and
+// both sides come out even.
 func TestIntegrationResolutionFitInsideBox(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 640, Height: 448, Seconds: 1})

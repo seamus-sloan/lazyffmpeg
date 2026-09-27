@@ -91,12 +91,12 @@ type Model struct {
 // Option configures a Model built by New.
 type Option func(*Model)
 
-// WithLister overrides the function used to list a directory (Task 10b).
+// WithLister overrides the function used to list a directory.
 func WithLister(fn ListFunc) Option {
 	return func(m *Model) { m.listFn = fn }
 }
 
-// WithProber overrides the function used to probe a chosen file (Task 10b).
+// WithProber overrides the function used to probe a chosen file.
 func WithProber(fn ProbeFunc) Option {
 	return func(m *Model) { m.probeFn = fn }
 }
@@ -147,7 +147,7 @@ func (m Model) Pipeline() pipeline.Pipeline {
 	return m.pipeline
 }
 
-// Update handles one message, per the Elm architecture.
+// Update handles one message and returns the next model and command.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

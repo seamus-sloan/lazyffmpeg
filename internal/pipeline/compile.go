@@ -283,7 +283,7 @@ var codecSpecs = map[Codec]codecSpec{
 
 // buildVideoArgs builds the -c:v ... -pix_fmt yuv420p args for codec,
 // either in CRF mode (default, or from a Quality step's CRF) or
-// target-size mode (from a Quality step's TargetBytes), per the Task 5
+// target-size mode (from a Quality step's TargetBytes), per the video-args
 // table and target-size formula.
 func buildVideoArgs(codec Codec, qualityStep Step, hasQuality bool, outDur float64, audioBps int64) ([]string, error) {
 	spec := codecSpecs[codec]

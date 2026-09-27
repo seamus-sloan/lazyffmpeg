@@ -182,7 +182,7 @@ func TestCompileInvalidStepError(t *testing.T) {
 	}
 }
 
-// --- Task 5: encoder table, CRF, target size, webm, container, raw args ---
+// --- encoder table, CRF, target size, webm, container, raw args ---
 
 func TestCompileEncoderDefaultCRF(t *testing.T) {
 	cases := []struct {

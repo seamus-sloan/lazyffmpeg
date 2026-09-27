@@ -316,7 +316,7 @@ func TestParseNoStepsHasStepsFalse(t *testing.T) {
 	}
 }
 
-// --- optional positional (addendum A4) ---
+// --- optional positional ---
 
 func TestParseNoInputAllowed(t *testing.T) {
 	cfg, err := Parse(nil)
