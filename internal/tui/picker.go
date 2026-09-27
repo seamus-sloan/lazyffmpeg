@@ -102,7 +102,12 @@ func (m Model) handlePickerProbed(msg pickerProbedMsg) (tea.Model, tea.Cmd) {
 	m.menuCursor = 0
 	m.pipelineCursor = 0
 	m.undo = nil
+	m.preview = previewState{}
 	m.picker.status = ""
+
+	if m.width > 0 {
+		return m.requestRender()
+	}
 	return m, nil
 }
 

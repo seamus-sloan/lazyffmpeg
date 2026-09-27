@@ -10,6 +10,7 @@ import (
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
+	"github.com/seamus-sloan/lazyffmpeg/internal/preview"
 	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 	"github.com/seamus-sloan/lazyffmpeg/internal/runner"
 )
@@ -63,6 +64,11 @@ type Model struct {
 	modal  *modalState
 	run    runState
 
+	preview           previewState
+	renderFn          RenderFunc
+	rendererAvailable bool
+	colorProfile      string
+
 	session  app.Session
 	pipeline pipeline.Pipeline
 	undo     []pipeline.Pipeline
@@ -112,6 +118,10 @@ func New(s app.Session, opts ...Option) Model {
 		listFn:   defaultList,
 		probeFn:  probe.Run,
 		runFn:    runner.Run,
+
+		renderFn:          preview.Render,
+		rendererAvailable: preview.Available(),
+		colorProfile:      "256",
 	}
 	if s.Input == "" {
 		m.mode = modePicker
@@ -143,6 +153,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.mode == modeMain {
+			return m.requestRender()
+		}
+		return m, nil
+
+	case tea.ColorProfileMsg:
+		m.colorProfile = colorProfileString(msg.Profile)
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -159,6 +176,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case runDoneMsg:
 		return m.handleRunDone(msg)
+
+	case previewFrameMsg:
+		return m.handlePreviewFrame(msg)
+
+	case previewTickMsg:
+		return m.handlePreviewTick(msg)
 	}
 	return m, nil
 }
@@ -212,6 +235,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m = m.moveCursor(-1)
 		return m, nil
+	case "l":
+		return m.seekPreview(1)
+	case "h":
+		return m.seekPreview(-1)
+	case "L":
+		return m.seekPreview(5)
+	case "H":
+		return m.seekPreview(-5)
+	case "v":
+		return m.togglePreviewMode()
+	case "space":
+		return m.togglePlay()
 	}
 
 	if m.focus == focusMenu {
@@ -229,16 +264,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "x":
 			m = m.removeStep()
-			return m, nil
+			return m.maybeRerenderResult()
 		case "J":
 			m = m.moveStep(1)
-			return m, nil
+			return m.maybeRerenderResult()
 		case "K":
 			m = m.moveStep(-1)
-			return m, nil
+			return m.maybeRerenderResult()
 		case "u":
 			m = m.undoLast()
-			return m, nil
+			return m.maybeRerenderResult()
 		case "e", "enter":
 			m = m.openModalForCurrentStep()
 			return m, nil

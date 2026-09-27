@@ -91,6 +91,21 @@ func frameBottom(width int) string {
 	return "╰" + strings.Repeat("─", maxInt(width-2, 0)) + "╯"
 }
 
+// boxTop/boxBottom draw a light-weight titled box (the preview box),
+// distinct from frameTop/frameBottom's rounded outer frame.
+func boxTop(width int, title string) string {
+	left := "┌─ " + title + " "
+	remaining := width - lipgloss.Width(left) - 1
+	if remaining < 0 {
+		remaining = 0
+	}
+	return left + strings.Repeat("─", remaining) + "┐"
+}
+
+func boxBottom(width int) string {
+	return "└" + strings.Repeat("─", maxInt(width-2, 0)) + "┘"
+}
+
 func (m Model) renderFrame() string {
 	width := m.width
 	top := frameTop(width, m.frameTitle())
@@ -169,12 +184,7 @@ func maxInt(a, b int) int {
 func (m Model) leftColumnLines() []string {
 	var lines []string
 
-	cols, rows := m.previewBoxSize()
-	lines = append(lines, "┌"+strings.Repeat("─", cols)+"┐")
-	for i := 0; i < rows; i++ {
-		lines = append(lines, "│"+strings.Repeat(" ", cols)+"│")
-	}
-	lines = append(lines, "└"+strings.Repeat("─", cols)+"┘")
+	lines = append(lines, m.previewBoxLines()...)
 
 	lines = append(lines, m.infoLine())
 	lines = append(lines, "")
@@ -186,7 +196,7 @@ func (m Model) leftColumnLines() []string {
 
 func (m Model) infoLine() string {
 	info := m.session.Info
-	pos := units.FormatClock(0)
+	pos := units.FormatClock(m.preview.time)
 	total := units.FormatClock(info.Duration)
 	dims := fmt.Sprintf("%d×%d", info.Video.Width, info.Video.Height)
 	codec := codecLabel(info.Video.Codec)

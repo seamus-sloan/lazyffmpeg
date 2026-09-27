@@ -338,6 +338,9 @@ func (m Model) handleModalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		m = m.confirmModal()
+		if m.modal == nil {
+			return m.maybeRerenderResult()
+		}
 		return m, nil
 	}
 
