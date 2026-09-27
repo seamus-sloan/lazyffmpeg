@@ -30,7 +30,9 @@ func (m Model) View() tea.View {
 	} else {
 		body = m.renderFrame()
 	}
-	if m.showHelp {
+	if m.modal != nil {
+		body = m.overlayModal(body)
+	} else if m.showHelp {
 		body = m.overlayHelp(body)
 	}
 	v.Content = body

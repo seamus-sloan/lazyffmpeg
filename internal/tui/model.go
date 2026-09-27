@@ -59,6 +59,7 @@ type Model struct {
 
 	mode   screenMode
 	picker pickerState
+	modal  *modalState
 
 	session  app.Session
 	pipeline pipeline.Pipeline
@@ -160,6 +161,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.modal != nil {
+		return m.handleModalKey(msg)
+	}
+
 	// '?' opens help, except while the picker's filter is capturing text
 	// (where '?' is a filterable character).
 	if key == "?" && !(m.mode == modePicker && m.picker.filtering) {
@@ -193,6 +198,17 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.focus == focusMenu {
+		switch key {
+		case "enter":
+			if m.menuCursor == menuRunIndex {
+				return m, nil // wired in Task 12
+			}
+			m = m.openModal(menuKinds[m.menuCursor])
+			return m, nil
+		}
+	}
+
 	if m.focus == focusPipeline {
 		switch key {
 		case "x":
@@ -206,6 +222,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "u":
 			m = m.undoLast()
+			return m, nil
+		case "e", "enter":
+			m = m.openModalForCurrentStep()
 			return m, nil
 		}
 	}

@@ -509,6 +509,22 @@ func TestCompileRawArgsBeforeOutput(t *testing.T) {
 	}
 }
 
+func TestDefaultCRF(t *testing.T) {
+	cases := map[Codec]int{
+		CodecH264:   23,
+		CodecH265:   28,
+		CodecAV1:    35,
+		CodecVP9:    33,
+		CodecH264HW: 23,
+		CodecH265HW: 23,
+	}
+	for codec, want := range cases {
+		if got := DefaultCRF(codec); got != want {
+			t.Errorf("DefaultCRF(%v) = %d, want %d", codec, got, want)
+		}
+	}
+}
+
 func TestValidateMirrorsCompile(t *testing.T) {
 	p := New(Speed{Factor: 2}, Trim{Start: 20})
 	if err := Validate(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"}); !errors.Is(err, ErrTrimRange) {

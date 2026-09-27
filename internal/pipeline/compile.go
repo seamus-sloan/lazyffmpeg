@@ -264,6 +264,14 @@ type codecSpec struct {
 	av1Target  bool // target mode emits only "-b:v Vk"
 }
 
+// DefaultCRF returns codec's default CRF value: the value Compile uses in
+// the absence of a Quality step. Callers such as the TUI use it to
+// preselect a Quality preset before Compile validates anything. Unknown
+// codecs return 0.
+func DefaultCRF(codec Codec) int {
+	return codecSpecs[codec].defaultCRF
+}
+
 var codecSpecs = map[Codec]codecSpec{
 	CodecH264:   {defaultCRF: 23, maxCRF: 51},
 	CodecH265:   {defaultCRF: 28, maxCRF: 51},
