@@ -182,6 +182,333 @@ func TestCompileInvalidStepError(t *testing.T) {
 	}
 }
 
+// --- Task 5: encoder table, CRF, target size, webm, container, raw args ---
+
+func TestCompileEncoderDefaultCRF(t *testing.T) {
+	cases := []struct {
+		codec Codec
+		want  string
+	}{
+		{CodecH264, "-c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p"},
+		{CodecH265, "-c:v libx265 -preset medium -crf 28 -pix_fmt yuv420p -tag:v hvc1"},
+		{CodecAV1, "-c:v libsvtav1 -preset 8 -crf 35 -pix_fmt yuv420p"},
+		{CodecVP9, "-c:v libvpx-vp9 -deadline good -cpu-used 4 -row-mt 1 -crf 33 -b:v 0 -pix_fmt yuv420p"},
+		{CodecH264HW, "-c:v h264_videotoolbox -q:v 66 -pix_fmt yuv420p"},
+		{CodecH265HW, "-c:v hevc_videotoolbox -q:v 66 -pix_fmt yuv420p -tag:v hvc1"},
+	}
+	for _, c := range cases {
+		p := New(Encoder{Codec: c.codec})
+		argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+		if err != nil {
+			t.Errorf("Compile(%v): %v", c.codec, err)
+			continue
+		}
+		joined := strings.Join(argv, " ")
+		if !strings.Contains(joined, c.want) {
+			t.Errorf("Compile(%v) = %q, want to contain %q", c.codec, joined, c.want)
+		}
+	}
+}
+
+func TestCompileQualityCRFReplacesDefault(t *testing.T) {
+	p := New(Encoder{Codec: CodecH264}, Quality{CRF: 30})
+	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(strings.Join(argv, " "), "-crf 30") {
+		t.Errorf("argv should use CRF 30, got %v", argv)
+	}
+}
+
+func TestCompileCRFRangeError(t *testing.T) {
+	p := New(Encoder{Codec: CodecH264}, Quality{CRF: 60})
+	_, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrCRFRange) {
+		t.Errorf("err = %v, want ErrCRFRange", err)
+	}
+}
+
+func TestCompileCRFRangeOKForVP9(t *testing.T) {
+	p := New(Encoder{Codec: CodecVP9}, Quality{CRF: 60})
+	_, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Errorf("Compile: unexpected error %v", err)
+	}
+}
+
+func TestCompileCopyVideoArgs(t *testing.T) {
+	p := New(Encoder{Codec: CodecCopy})
+	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-c:v copy") {
+		t.Errorf("argv missing -c:v copy: %s", joined)
+	}
+}
+
+func TestCompileCopyWithFiltersError(t *testing.T) {
+	p := New(Speed{Factor: 2}, Encoder{Codec: CodecCopy})
+	_, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrCopyWithFilters) {
+		t.Errorf("err = %v, want ErrCopyWithFilters", err)
+	}
+}
+
+func TestCompileCopyWithQualityError(t *testing.T) {
+	p := New(Encoder{Codec: CodecCopy}, Quality{CRF: 23})
+	_, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrCopyWithQuality) {
+		t.Errorf("err = %v, want ErrCopyWithQuality", err)
+	}
+}
+
+func infoHEVC(duration float64) probe.Info {
+	return probe.Info{
+		Duration: duration,
+		Video:    probe.VideoStream{Codec: "hevc", Width: 1920, Height: 1080, FPS: 30},
+	}
+}
+
+func TestCompileHVC1TagForCopyOfHEVC(t *testing.T) {
+	p := New(Encoder{Codec: CodecCopy})
+	argv, err := Compile(infoHEVC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(strings.Join(argv, " "), "-tag:v hvc1") {
+		t.Errorf("argv missing -tag:v hvc1 for hevc copy into mp4: %v", argv)
+	}
+}
+
+func TestCompileHVC1TagOnlyMP4Mov(t *testing.T) {
+	p := New(Encoder{Codec: CodecH265})
+	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mkv"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if strings.Contains(strings.Join(argv, " "), "-tag:v hvc1") {
+		t.Errorf("argv should not have -tag:v hvc1 for mkv: %v", argv)
+	}
+}
+
+func TestCompileTargetSizeBitrate(t *testing.T) {
+	p := New(Speed{Factor: 2}, Quality{TargetBytes: 20_000_000})
+	argv, err := Compile(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	want := "-b:v 9084k -maxrate 9084k -bufsize 18168k"
+	if !strings.Contains(strings.Join(argv, " "), want) {
+		t.Errorf("argv missing target bitrate %q: %v", want, argv)
+	}
+}
+
+func TestCompileTargetSizeAV1OmitsMaxrateBufsize(t *testing.T) {
+	p := New(Encoder{Codec: CodecAV1}, Quality{TargetBytes: 20_000_000})
+	argv, err := Compile(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if strings.Contains(joined, "-maxrate") || strings.Contains(joined, "-bufsize") {
+		t.Errorf("libsvtav1 target mode should omit -maxrate/-bufsize: %v", argv)
+	}
+	if !strings.Contains(joined, "-b:v") {
+		t.Errorf("argv missing -b:v: %v", argv)
+	}
+}
+
+func TestCompileTargetTooSmallError(t *testing.T) {
+	p := New(Quality{TargetBytes: 1000})
+	_, err := Compile(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrTargetTooSmall) {
+		t.Errorf("err = %v, want ErrTargetTooSmall", err)
+	}
+}
+
+func TestCompileUnknownDurationError(t *testing.T) {
+	p := New(Quality{TargetBytes: 20_000_000})
+	_, err := Compile(infoAAC(0), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrUnknownDuration) {
+		t.Errorf("err = %v, want ErrUnknownDuration", err)
+	}
+}
+
+func TestCompileAudioRemove(t *testing.T) {
+	p := New(Audio{Mode: AudioRemove})
+	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-an") {
+		t.Errorf("argv missing -an: %s", joined)
+	}
+	if strings.Contains(joined, "-map 0:a:0") {
+		t.Errorf("argv should not map audio when removed: %s", joined)
+	}
+}
+
+func TestCompileAudioAACBitrate(t *testing.T) {
+	p := New(Audio{Mode: AudioAAC, BitrateK: 96})
+	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(strings.Join(argv, " "), "-c:a aac -b:a 96k") {
+		t.Errorf("argv missing aac 96k: %v", argv)
+	}
+}
+
+func TestCompileAudioStepNoInputAudioNoError(t *testing.T) {
+	p := New(Audio{Mode: AudioRemove})
+	argv, err := Compile(infoNoAudio(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if strings.Contains(joined, "-an") || strings.Contains(joined, "-c:a") || strings.Contains(joined, "-map 0:a:0") {
+		t.Errorf("argv should have no audio args when input has no audio: %s", joined)
+	}
+}
+
+func TestCompileContainerStepOverridesExtension(t *testing.T) {
+	p := New(Container{Format: FormatMKV})
+	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "-f matroska") {
+		t.Errorf("argv missing -f matroska: %s", joined)
+	}
+	if strings.Contains(joined, "-movflags") {
+		t.Errorf("mkv container should not have -movflags: %s", joined)
+	}
+}
+
+func TestCompileContainerStepMuxerNames(t *testing.T) {
+	cases := map[Format]string{
+		FormatMP4:  "-f mp4",
+		FormatMOV:  "-f mov",
+		FormatMKV:  "-f matroska",
+		FormatWebM: "-f webm",
+	}
+	for f, want := range cases {
+		p := New(Container{Format: f})
+		info := infoAAC(10)
+		if f == FormatWebM {
+			p = New(Container{Format: f}, Encoder{Codec: CodecVP9})
+			info.Audio.Codec = "opus"
+		}
+		argv, err := Compile(info, p, Options{Input: "IN", Output: "OUT.mp4"})
+		if err != nil {
+			t.Errorf("Compile(%v): %v", f, err)
+			continue
+		}
+		if !strings.Contains(strings.Join(argv, " "), want) {
+			t.Errorf("Compile(%v) missing %q: %v", f, want, argv)
+		}
+	}
+}
+
+func infoVP9Webm(duration float64) probe.Info {
+	return probe.Info{
+		Duration: duration,
+		Video:    probe.VideoStream{Codec: "vp9", Width: 1920, Height: 1080, FPS: 30},
+		Audio:    &probe.AudioStream{Codec: "opus", BitRate: 96000, Channels: 2, SampleRate: 48000},
+	}
+}
+
+func TestCompileWebmDefaultsToVP9(t *testing.T) {
+	p := New(Container{Format: FormatWebM})
+	argv, err := Compile(infoVP9Webm(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(strings.Join(argv, " "), "-c:v libvpx-vp9") {
+		t.Errorf("argv should default to libvpx-vp9 for webm: %v", argv)
+	}
+}
+
+func TestCompileWebmWrongEncoderError(t *testing.T) {
+	p := New(Container{Format: FormatWebM}, Encoder{Codec: CodecH264})
+	_, err := Compile(infoVP9Webm(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrWebMVideo) {
+		t.Errorf("err = %v, want ErrWebMVideo", err)
+	}
+}
+
+func TestCompileWebmCopyRequiresVP9OrAV1Input(t *testing.T) {
+	p := New(Container{Format: FormatWebM}, Encoder{Codec: CodecCopy})
+	_, err := Compile(infoVP9Webm(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Errorf("Compile: unexpected error for vp9 input copy into webm: %v", err)
+	}
+
+	nonVP9 := infoVP9Webm(10)
+	nonVP9.Video.Codec = "h264"
+	_, err = Compile(nonVP9, p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrWebMVideo) {
+		t.Errorf("err = %v, want ErrWebMVideo for non-vp9/av1 copy source", err)
+	}
+}
+
+func TestCompileWebmKeepAudioCopiesOpus(t *testing.T) {
+	p := New(Container{Format: FormatWebM})
+	argv, err := Compile(infoVP9Webm(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(strings.Join(argv, " "), "-c:a copy") {
+		t.Errorf("argv should copy opus audio into webm: %v", argv)
+	}
+}
+
+func TestCompileWebmKeepAudioReencodesNonOpus(t *testing.T) {
+	info := infoVP9Webm(10)
+	info.Audio.Codec = "aac"
+	p := New(Container{Format: FormatWebM})
+	argv, err := Compile(info, p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(strings.Join(argv, " "), "-c:a libopus -b:a 128k") {
+		t.Errorf("argv should re-encode non-opus audio to libopus for webm: %v", argv)
+	}
+}
+
+func TestCompileWebmAACAudioError(t *testing.T) {
+	p := New(Container{Format: FormatWebM}, Audio{Mode: AudioAAC, BitrateK: 128})
+	_, err := Compile(infoVP9Webm(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if !errors.Is(err, ErrWebMAudio) {
+		t.Errorf("err = %v, want ErrWebMAudio", err)
+	}
+}
+
+func TestCompileRawArgsBeforeOutput(t *testing.T) {
+	p := New(RawArgs{Text: "-map_metadata -1", Args: []string{"-map_metadata", "-1"}})
+	argv, err := Compile(infoAAC(10), p, Options{Input: "IN", Output: "OUT.mp4"})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if len(argv) < 3 {
+		t.Fatalf("argv too short: %v", argv)
+	}
+	last := argv[len(argv)-1]
+	if last != "OUT.mp4" {
+		t.Errorf("last argv element = %q, want output path", last)
+	}
+	secondLast := argv[len(argv)-2]
+	thirdLast := argv[len(argv)-3]
+	if thirdLast != "-map_metadata" || secondLast != "-1" {
+		t.Errorf("raw args not immediately before output: %v", argv)
+	}
+}
+
 func TestValidateMirrorsCompile(t *testing.T) {
 	p := New(Speed{Factor: 2}, Trim{Start: 20})
 	if err := Validate(infoAAC(33), p, Options{Input: "IN", Output: "OUT.mp4"}); !errors.Is(err, ErrTrimRange) {

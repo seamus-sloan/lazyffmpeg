@@ -2,8 +2,10 @@ package pipeline_test
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
@@ -164,5 +166,116 @@ func TestIntegrationResolutionFitInsideBox(t *testing.T) {
 	gotAspect := float64(w) / float64(h)
 	if diff := gotAspect - wantAspect; diff > 0.01 || diff < -0.01 {
 		t.Errorf("aspect ratio = %v, want ~%v (within 1%%)", gotAspect, wantAspect)
+	}
+}
+
+func TestIntegrationAudioRemove(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1, Audio: true})
+	out := filepath.Join(filepath.Dir(in), "out.mp4")
+
+	info, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run: %v", err)
+	}
+
+	p := pipeline.New(pipeline.Audio{Mode: pipeline.AudioRemove})
+	argv, err := pipeline.Compile(info, p, pipeline.Options{Input: in, Output: out})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	runFFmpeg(t, argv)
+
+	outInfo, err := probe.Run(context.Background(), out)
+	if err != nil {
+		t.Fatalf("probe.Run(out): %v", err)
+	}
+	if outInfo.Audio != nil {
+		t.Errorf("output should have no audio stream, got %+v", outInfo.Audio)
+	}
+}
+
+func TestIntegrationContainerWebm(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1, Audio: true})
+	out := filepath.Join(filepath.Dir(in), "out.webm")
+
+	info, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run: %v", err)
+	}
+
+	p := pipeline.New(pipeline.Container{Format: pipeline.FormatWebM})
+	argv, err := pipeline.Compile(info, p, pipeline.Options{Input: in, Output: out})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	runFFmpeg(t, argv)
+
+	outInfo, err := probe.Run(context.Background(), out)
+	if err != nil {
+		t.Fatalf("probe.Run(out): %v", err)
+	}
+	if outInfo.Video.Codec != "vp9" {
+		t.Errorf("output video codec = %q, want vp9", outInfo.Video.Codec)
+	}
+	if outInfo.Audio == nil || outInfo.Audio.Codec != "opus" {
+		t.Errorf("output audio = %+v, want opus", outInfo.Audio)
+	}
+}
+
+func TestIntegrationEncoderH265MP4HasHVC1Tag(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+	out := filepath.Join(filepath.Dir(in), "out.mp4")
+
+	info, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run: %v", err)
+	}
+
+	p := pipeline.New(pipeline.Encoder{Codec: pipeline.CodecH265})
+	argv, err := pipeline.Compile(info, p, pipeline.Options{Input: in, Output: out})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	runFFmpeg(t, argv)
+
+	cmd := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0",
+		"-show_entries", "stream_tags=handler_name:stream=codec_tag_string",
+		"-of", "default=noprint_wrappers=1", out)
+	outBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ffprobe: %v\n%s", err, outBytes)
+	}
+	if !strings.Contains(string(outBytes), "hvc1") {
+		t.Errorf("expected hvc1 codec tag, got:\n%s", outBytes)
+	}
+}
+
+func TestIntegrationTargetSize(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 2, Audio: true})
+	out := filepath.Join(filepath.Dir(in), "out.mp4")
+
+	info, err := probe.Run(context.Background(), in)
+	if err != nil {
+		t.Fatalf("probe.Run: %v", err)
+	}
+
+	p := pipeline.New(pipeline.Quality{TargetBytes: 150_000})
+	argv, err := pipeline.Compile(info, p, pipeline.Options{Input: in, Output: out})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	runFFmpeg(t, argv)
+
+	fi, err := os.Stat(out)
+	if err != nil {
+		t.Fatalf("stat output: %v", err)
+	}
+	max := int64(150_000 * 1.10)
+	if fi.Size() > max {
+		t.Errorf("output size = %d, want <= %d", fi.Size(), max)
 	}
 }
