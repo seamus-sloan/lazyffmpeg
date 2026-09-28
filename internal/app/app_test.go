@@ -362,13 +362,19 @@ func TestMainNameOfTheInputItselfIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a, _, errOut := newApp()
-	code := a.Main(context.Background(), []string{in, "--name", "clip", "--force"})
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
-	}
-	if !strings.Contains(errOut.String(), app.ErrSameAsInput.Error()) {
-		t.Errorf("stderr = %q, want the same-as-input error", errOut.String())
+	for _, extra := range [][]string{{"--force"}, {"--dry-run"}} {
+		a, out, errOut := newApp()
+		code := a.Main(context.Background(), append([]string{in, "--name", "clip"}, extra...))
+		if code != 1 {
+			t.Errorf("%v: exit code = %d, want 1", extra, code)
+		}
+		want := `lazyff: file name "clip" is the input file; choose a different name` + "\n"
+		if errOut.String() != want {
+			t.Errorf("%v: stderr = %q, want %q", extra, errOut.String(), want)
+		}
+		if out.Len() != 0 {
+			t.Errorf("%v: stdout = %q, want nothing (no command, no run)", extra, out.String())
+		}
 	}
 	if after, err := os.ReadFile(in); err != nil || !bytes.Equal(before, after) {
 		t.Errorf("input should be untouched (err=%v)", err)

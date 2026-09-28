@@ -122,9 +122,11 @@ func (m Model) tryRun() (Model, tea.Cmd) {
 		return m, nil // the error already shows in the footer
 	}
 
-	if !m.session.InPlace && app.SameAsInput(m.session.Input, outputPath) {
-		m.run = runState{phase: runError, err: app.ErrSameAsInput}
-		return m, nil
+	if !m.session.InPlace {
+		if err := app.CheckNotInput(m.session.Input, outputPath, m.pipeline); err != nil {
+			m.run = runState{phase: runError, err: err}
+			return m, nil
+		}
 	}
 
 	if m.session.InPlace {

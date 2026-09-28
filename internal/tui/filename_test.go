@@ -207,7 +207,11 @@ func TestFileNameOfTheInputIsRefusedAsTheInputItself(t *testing.T) {
 	if cmd != nil || calls != 0 {
 		t.Fatalf("a run started (cmd %v, calls %d) for a name that is the input itself", cmd != nil, calls)
 	}
-	if !strings.Contains(viewText(m), app.ErrSameAsInput.Error()) {
-		t.Errorf("view missing the same-as-input error, got:\n%s", viewText(m))
+	out := viewText(m)
+	if !strings.Contains(out, `file name "clip" is the input file; choose a different name`) {
+		t.Errorf("view does not say the file name is the input, got:\n%s", out)
+	}
+	if strings.Contains(out, "--in-place") {
+		t.Errorf("view suggests --in-place, which cannot rename, got:\n%s", out)
 	}
 }

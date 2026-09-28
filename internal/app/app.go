@@ -31,6 +31,11 @@ var (
 	// ErrSameAsInput is returned when the resolved output path is the
 	// input file itself and --in-place was not given.
 	ErrSameAsInput = errors.New("output is the input file; use --in-place to replace it")
+	// ErrNameIsInput is wrapped, after the quoted name, when a File name
+	// step resolves the output to the input file itself, as in
+	// `file name "clip" is the input file; choose a different name`.
+	// --in-place is no way out there: it never renames.
+	ErrNameIsInput = errors.New("is the input file; choose a different name")
 	// ErrOutputExists is returned when the output already exists and
 	// --force was not given.
 	ErrOutputExists = errors.New("output exists")
@@ -212,9 +217,11 @@ func (a App) Main(ctx context.Context, args []string) int {
 		}
 	}
 
-	if !cfg.InPlace && SameAsInput(input, outputPath) {
-		fmt.Fprintf(a.Stderr, "lazyff: %v\n", ErrSameAsInput)
-		return 1
+	if !cfg.InPlace {
+		if err := CheckNotInput(input, outputPath, cfg.Pipeline); err != nil {
+			fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
+			return 1
+		}
 	}
 
 	if !cfg.DryRun && !cfg.InPlace && !cfg.Force {
@@ -301,6 +308,21 @@ func versionString() string {
 		return info.Main.Version
 	}
 	return "dev"
+}
+
+// CheckNotInput returns nil unless output resolves to input itself (see
+// SameAsInput). Then it returns ErrNameIsInput naming p's File name step
+// when p has one (that name produced the output), else ErrSameAsInput.
+// The headless path, --dry-run and the TUI's run path all apply it
+// whenever the input is not being replaced in place.
+func CheckNotInput(input, output string, p pipeline.Pipeline) error {
+	if !SameAsInput(input, output) {
+		return nil
+	}
+	if s, ok := p.Find(pipeline.KindFilename); ok {
+		return fmt.Errorf("file name %q %w", s.(pipeline.Filename).Name, ErrNameIsInput)
+	}
+	return ErrSameAsInput
 }
 
 // SameAsInput reports whether output resolves to the same file as input:
