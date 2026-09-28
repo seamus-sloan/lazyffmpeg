@@ -42,18 +42,25 @@ var (
 	// input whose format lazyff cannot write back: an extension it does
 	// not write at all, or an .m4v input with an encoder .m4v cannot hold.
 	ErrInPlaceUnsupportedExt = errors.New("in-place cannot write this format")
+	// ErrInPlaceRename is returned when --in-place is combined with a File
+	// name step: renaming in place would delete the original.
+	ErrInPlaceRename = errors.New("in-place cannot rename the file (that would delete the original)")
 )
 
-// CheckInPlace reports whether replacing input in place is safe for p: a
+// CheckInPlace reports whether replacing input in place is safe for p: p
+// must not have a File name step (in-place only ever writes back to
+// input's own path, so a rename would mean deleting the original), a
 // Container step's format must match input's own extension (in-place never
-// changes the container, it only ever writes back to input's own path),
-// and when there is no Container step, input's own extension must be able
-// to hold p's encode (pipeline.CanKeepExt). It is the single rule the
-// headless path, --dry-run and the TUI's run confirmation all enforce, so
-// an --in-place run never silently writes a different container over the
-// original file. An unsupported format's error suggests writing a new
-// .mp4 next to the input with -o instead.
+// changes the container), and when there is no Container step, input's own
+// extension must be able to hold p's encode (pipeline.CanKeepExt). It is
+// the single rule the headless path, --dry-run and the TUI's run
+// confirmation all enforce, so an --in-place run never silently writes a
+// different container over the original file. An unsupported format's
+// error suggests writing a new .mp4 next to the input with -o instead.
 func CheckInPlace(input string, p pipeline.Pipeline) error {
+	if _, ok := p.Find(pipeline.KindFilename); ok {
+		return ErrInPlaceRename
+	}
 	ext := filepath.Ext(input)
 	inputExt := strings.ToLower(ext)
 	if c, ok := p.Find(pipeline.KindContainer); ok {

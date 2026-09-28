@@ -389,6 +389,8 @@ func TestCheckInPlace(t *testing.T) {
 		{"m4v av1", "/v/clip.M4V", pipeline.New(pipeline.Encoder{Codec: pipeline.CodecAV1}), app.ErrInPlaceUnsupportedExt},
 		{"gif", "/v/clip.gif", pipeline.New(), app.ErrInPlaceUnsupportedExt},
 		{"mov with mkv container", "/v/clip.mov", pipeline.New(pipeline.Container{Format: pipeline.FormatMKV}), app.ErrInPlaceContainerMismatch},
+		{"file name step", "/v/clip.mov", pipeline.New(pipeline.Filename{Name: "demo.mov"}), app.ErrInPlaceRename},
+		{"file name step naming the input", "/v/clip.mov", pipeline.New(pipeline.Filename{Name: "clip"}), app.ErrInPlaceRename},
 	}
 	for _, c := range cases {
 		err := app.CheckInPlace(c.input, c.p)
