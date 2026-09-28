@@ -45,6 +45,7 @@ var menuKinds = []pipeline.Kind{
 	pipeline.KindQuality,
 	pipeline.KindAudio,
 	pipeline.KindContainer,
+	pipeline.KindFilename,
 	pipeline.KindRawArgs,
 }
 

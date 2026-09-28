@@ -112,7 +112,7 @@ func TestViewShowsPipelineAndMenu(t *testing.T) {
 	for _, want := range []string{
 		"MENU", "Video", "Output", "Run",
 		"Resolution", "Speed", "Trim", "Frame rate",
-		"Encoder", "Quality / target size", "Audio", "Container", "Raw args",
+		"Encoder", "Quality / target size", "Audio", "Container", "File name", "Raw args",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing menu text %q, got:\n%s", want, out)
@@ -132,13 +132,14 @@ func allKindSteps() []pipeline.Step {
 		pipeline.Quality{CRF: 20},
 		pipeline.Audio{Mode: pipeline.AudioAAC, BitrateK: 128},
 		pipeline.Container{Format: pipeline.FormatMKV},
+		pipeline.Filename{Name: "demo.mkv"},
 		pipeline.RawArgs{Text: "-map_metadata -1", Args: []string{"-map_metadata", "-1"}},
 	}
 }
 
 func TestMainFrameFitsTerminalHeight(t *testing.T) {
 	all := allKindSteps()
-	for _, n := range []int{3, 6, 9} {
+	for _, n := range []int{3, 6, 9, 10} {
 		pl := pipeline.New(all[:n]...)
 		m := resized(New(testSession(pl)), 100, 30)
 

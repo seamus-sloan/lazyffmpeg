@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -104,7 +105,7 @@ func presetsFor(kind pipeline.Kind, codec pipeline.Codec) []modalOption {
 			{"mkv", pipeline.Container{Format: pipeline.FormatMKV}},
 			{"webm", pipeline.Container{Format: pipeline.FormatWebM}},
 		}
-	case pipeline.KindRawArgs:
+	case pipeline.KindFilename, pipeline.KindRawArgs:
 		return []modalOption{{"Custom…", nil}}
 	}
 	return nil
@@ -117,6 +118,15 @@ func placeholderFor(kind pipeline.Kind) string {
 		return "WxH (fit), WxH! (stretch), Wx, xH, 50%"
 	case pipeline.KindTrim:
 		return "0:05-0:20"
+	}
+	return ""
+}
+
+// hintFor is a line shown under kind's Custom… text input, for a kind
+// whose input is prefilled (so its placeholder would never show).
+func hintFor(kind pipeline.Kind) string {
+	if kind == pipeline.KindFilename {
+		return "name (.mp4/.mov/.mkv/.webm/.m4v sets the container)"
 	}
 	return ""
 }
@@ -168,6 +178,8 @@ func customPrefill(s pipeline.Step) string {
 		case pipeline.AudioAAC:
 			return fmt.Sprintf("aac:%dk", v.BitrateK)
 		}
+	case pipeline.Filename:
+		return v.Name
 	case pipeline.RawArgs:
 		return v.Text
 	}
@@ -213,6 +225,12 @@ func parseCustom(kind pipeline.Kind, text string) (pipeline.Step, error) {
 			return nil, err
 		}
 		return v, nil
+	case pipeline.KindFilename:
+		v, err := pipeline.ParseFilename(text)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
 	case pipeline.KindRawArgs:
 		args, err := pipeline.SplitArgs(text)
 		if err != nil {
@@ -225,7 +243,8 @@ func parseCustom(kind pipeline.Kind, text string) (pipeline.Step, error) {
 
 // openModal opens kind's step modal, preselecting the pipeline's current
 // value for kind when there is one (a matching preset, or Custom…
-// prefilled with its text).
+// prefilled with its text). With no File name step yet, File name's input
+// is prefilled with the current output's file name, ready to edit.
 func (m Model) openModal(kind pipeline.Kind) Model {
 	container := pipeline.EffectiveContainer(m.session.OutputPath(m.pipeline), m.pipeline)
 	codec := pipeline.EffectiveCodec(m.pipeline, container)
@@ -268,6 +287,9 @@ func (m Model) openModal(kind pipeline.Kind) Model {
 				}
 			}
 		}
+	} else if kind == pipeline.KindFilename {
+		ti.SetValue(filepath.Base(m.session.OutputPath(m.pipeline)))
+		ti.CursorEnd()
 	}
 	if isCustomOption(opts, ms.cursor) {
 		ti.Focus()
@@ -379,6 +401,9 @@ func (m Model) modalView() string {
 		b.WriteString(cursorPrefix(on) + label + "\n")
 		if o.step == nil {
 			b.WriteString("    " + ms.input.View() + "\n")
+			if hint := hintFor(ms.kind); hint != "" {
+				b.WriteString("    " + dimStyle.Render(hint) + "\n")
+			}
 		}
 	}
 	if ms.err != "" {

@@ -40,11 +40,20 @@ func assertFits(t *testing.T, name, view string, width, height int) {
 }
 
 // layoutSteps is allKindSteps with a very long raw-args step, so the
-// compiled command wraps across many footer lines once expanded.
+// compiled command wraps across many footer lines once expanded, and a
+// File name close to the longest allowed, so the footer's output path and
+// the PIPELINE row run long too.
 func layoutSteps() []pipeline.Step {
 	steps := allKindSteps()
 	long := strings.Repeat("y", 400)
-	steps[len(steps)-1] = pipeline.RawArgs{Text: long, Args: []string{long}}
+	for i, s := range steps {
+		switch s.Kind() {
+		case pipeline.KindFilename:
+			steps[i] = pipeline.Filename{Name: strings.Repeat("a long output name ", 12) + ".mkv"}
+		case pipeline.KindRawArgs:
+			steps[i] = pipeline.RawArgs{Text: long, Args: []string{long}}
+		}
+	}
 	return steps
 }
 
@@ -57,8 +66,9 @@ func multiLineError() string {
 }
 
 // screensOf returns every screen the main editor can show for base: the
-// editor itself with either panel focused, the help and a step modal over
-// it, and each run-flow screen, including ones showing multi-line errors.
+// editor itself with either panel focused, the help and a step modal (a
+// preset one, and File name's prefilled input with its hint) over it, and
+// each run-flow screen, including ones showing multi-line errors.
 func screensOf(base Model) map[string]Model {
 	screens := map[string]Model{"main": base}
 
@@ -84,6 +94,16 @@ func screensOf(base Model) map[string]Model {
 	ms.err = multiLineError()
 	modalErr.modal = &ms
 	screens["modal, multi-line error"] = modalErr
+
+	fileName := base
+	fileName.focus = focusMenu
+	for i, k := range menuKinds {
+		if k == pipeline.KindFilename {
+			fileName.menuCursor = i
+		}
+	}
+	mm, _ = fileName.Update(key("enter"))
+	screens["file name modal"] = mm.(Model)
 
 	tail := make([]string, 40)
 	for i := range tail {
