@@ -495,10 +495,12 @@ func (f Filename) Validate() error {
 	switch {
 	case f.Name == "":
 		return invalidf("file name must not be empty")
-	case f.Name == "." || f.Name == "..":
-		return invalidf("file name cannot be %q", f.Name)
+	case strings.HasPrefix(f.Name, "."):
+		return invalidf("file name must not start with \".\" (that makes a hidden file): %q", f.Name)
 	case strings.ContainsAny(f.Name, `/\`):
 		return invalidf("file name must not contain / or \\ (not a path): %q", f.Name)
+	case strings.IndexFunc(f.Name, isControl) >= 0:
+		return invalidf("file name must not contain control characters: %q", f.Name)
 	case len(f.Name) > maxFilenameBytes:
 		return invalidf("file name is %d bytes, over the %d-byte limit", len(f.Name), maxFilenameBytes)
 	}
@@ -507,6 +509,12 @@ func (f Filename) Validate() error {
 
 func (f Filename) Summary() string {
 	return f.Name
+}
+
+// isControl reports whether r is an ASCII control character (below 0x20,
+// or DEL), none of which belong in a file name.
+func isControl(r rune) bool {
+	return r < 0x20 || r == 0x7f
 }
 
 // RawArgs inserts extra ffmpeg arguments immediately before the output

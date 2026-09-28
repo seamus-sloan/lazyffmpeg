@@ -215,3 +215,16 @@ func TestFileNameOfTheInputIsRefusedAsTheInputItself(t *testing.T) {
 		t.Errorf("view suggests --in-place, which cannot rename, got:\n%s", out)
 	}
 }
+
+func TestFileNameModalRejectsAHiddenFileName(t *testing.T) {
+	m := renameTo(t, resized(New(testSession(pipeline.New())), 100, 30), ".hidden")
+	if m.modal == nil {
+		t.Fatal("modal closed on a name starting with .")
+	}
+	if !strings.Contains(viewText(m), "must not start with") {
+		t.Errorf("modal does not explain the rejected name:\n%s", viewText(m))
+	}
+	if _, ok := m.pipeline.Find(pipeline.KindFilename); ok {
+		t.Error("a rejected name was added to the pipeline")
+	}
+}

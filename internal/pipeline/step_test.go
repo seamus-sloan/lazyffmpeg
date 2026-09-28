@@ -449,13 +449,17 @@ func TestKindFilenameIsAnOutputSettingLabelledFileName(t *testing.T) {
 }
 
 func TestFilenameValidate(t *testing.T) {
-	valid := []string{"demo", "demo.mp4", "my.clip", "Screen Recording at 1.02 PM (edited).mov", "...", strings.Repeat("n", 255)}
+	valid := []string{"demo", "demo.mp4", "my.clip", "Screen Recording at 1.02 PM (edited).mov", "Clip — été.mov", "a.", strings.Repeat("n", 255)}
 	for _, name := range valid {
 		if err := (Filename{Name: name}).Validate(); err != nil {
 			t.Errorf("Validate(%q) = %v, want nil", name, err)
 		}
 	}
-	invalid := []string{"", ".", "..", "a/b", "/abs.mp4", "sub/", `a\b`, strings.Repeat("n", 256)}
+	invalid := []string{"", ".", "..", "a/b", "/abs.mp4", "sub/", `a\b`, strings.Repeat("n", 256),
+		// Hidden files.
+		".mov", ".hidden", "...", ". demo",
+		// Control characters.
+		"a\tb", "a\nb", "a\rb", "a\x00b", "\x1b[31mred.mp4", "a\x7fb", "end\x1f"}
 	for _, name := range invalid {
 		if err := (Filename{Name: name}).Validate(); !errors.Is(err, ErrInvalidStep) {
 			t.Errorf("Validate(%q) = %v, want ErrInvalidStep", name, err)

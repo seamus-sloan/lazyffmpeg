@@ -421,7 +421,7 @@ func TestParseNameWithInPlaceIsAUsageError(t *testing.T) {
 }
 
 func TestParseInvalidNameIsAUsageError(t *testing.T) {
-	for _, name := range []string{"", "  ", "..", "clips/demo.mp4"} {
+	for _, name := range []string{"", "  ", "..", "clips/demo.mp4", ".mov", ".hidden", "a\tb"} {
 		if _, err := Parse([]string{"in.mov", "--name", name}); !errors.Is(err, ErrUsage) {
 			t.Errorf("--name %q: err = %v, want ErrUsage", name, err)
 		}
