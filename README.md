@@ -2,9 +2,10 @@
 
 A keyboard-driven terminal tool that chains video operations on **one**
 input file and runs them as **one** ffmpeg invocation: resize, change
-speed, trim, change frame rate, change encoder/quality/audio/container, or
-pass raw extra ffmpeg args. Drive it from a terminal UI with a live
-preview, or skip the UI entirely and run a chain of flags headless.
+speed, trim, change frame rate, change encoder/quality/audio/container,
+pass raw extra ffmpeg args, or rename the output file. Drive it from a
+terminal UI with a live preview, or skip the UI entirely and run a chain
+of flags headless.
 
 ## Install
 
@@ -26,6 +27,7 @@ lazyff <input> --width 1920 --height 1080 --speed 2    # step flags: run headles
 lazyff <input> --speed 2 --tui                         # open the TUI pre-seeded with those steps
 lazyff <input> --speed 2 --dry-run                     # print the ffmpeg command, run nothing
 lazyff <input> --speed 2 -o out.mp4                    # explicit output path
+lazyff <input> --speed 2 --name demo                   # name the output (demo.<ext>, next to the input)
 lazyff <input> --speed 2 --in-place                    # encode to a temp file, then replace the input
 lazyff <input> --speed 2 --force                       # overwrite an existing output without asking
 ```
@@ -56,6 +58,7 @@ and moves straight to the editor, keeping any step flags and `-o`/
 | `--target-size SIZE` | e.g. `20MB` | target output size (single-pass ABR) |
 | `--audio MODE` | `keep remove aac[:BITRATE]` | audio handling |
 | `--container FMT` | `mp4 mov mkv webm` | output container |
+| `--name NAME` | file name | output file name, next to the input (see [Output file rules](#output-file-rules)) |
 | `--args "..."` | raw args | extra ffmpeg arguments, inserted before the output path |
 
 Other flags: `-o PATH`, `--in-place`, `--force`, `--tui`, `--dry-run`,
@@ -66,12 +69,28 @@ Other flags: `-o PATH`, `--in-place`, `--force`, `--tui`, `--dry-run`,
 Default output is `<name> (edited).<ext>` next to the input. `<ext>` is
 the Container step's extension when set; else the input's own when it is
 `mp4`, `m4v`, `mov`, `mkv` or `webm` (`m4v` only for H.264 or `copy`,
-which is all it can hold); else `.mp4`. `-o` overrides it. `--in-place`
-encodes to a temp file in the same directory and atomically replaces the
-input only after ffmpeg succeeds; it needs a format it can write back
-(one of those extensions, with an encoder it can hold), otherwise write a
-new file with `-o <name>.mp4`. An existing output is never overwritten
-silently: headless fails unless `--force`, the TUI asks first.
+which is all it can hold); else `.mp4`. `-o` overrides it.
+
+A File name step (`--name NAME`, or MENU's **File name**) renames the
+output instead, keeping it next to the input (in `-o`'s directory when
+the TUI was opened with `-o`). A name ending in `.mp4`, `.m4v`, `.mov`,
+`.mkv` or `.webm` (any case) is used as is, and that extension picks the
+container; it must agree with a Container step, and `.m4v` only holds
+H.264 or `copy`. Any other name gets the default `<ext>` above appended:
+`demo` → `demo.mov` for a `.mov` input, `my.clip` → `my.clip.mov`,
+`demo.gif` → `demo.gif.mp4` for an `.mp4` input. The name is just a file
+name: no `/` or `\`, at most 255 bytes. `--name` and `-o` both set the
+output, so they cannot be combined.
+
+`--in-place` encodes to a temp file in the same directory and atomically
+replaces the input only after ffmpeg succeeds; it needs a format it can
+write back (one of those extensions, with an encoder it can hold),
+otherwise write a new file with `-o <name>.mp4`. It never renames:
+`--name` with `--in-place` is a usage error, and the TUI refuses to run
+an in-place session with a File name step (renaming in place would delete
+the original). An output that resolves to the input itself is refused
+unless `--in-place`. An existing output is never overwritten silently:
+headless fails unless `--force`, the TUI asks first.
 
 ## Keybindings
 
@@ -119,6 +138,11 @@ text box) is selected. `enter` confirms: a preset applies immediately, a
 Custom… value is parsed and shown as an error under the box if invalid.
 `esc` cancels with no change.
 
+**File name** has no presets: its text box starts with the current output
+file name (e.g. `clip (edited).mov`), ready to edit. Confirming adds the
+step to PIPELINE and the footer's `→ <path>` follows it; `x` on the step
+goes back to the default name, and `u` undoes either.
+
 ### Run
 
 `y`/`n` answer an overwrite confirmation. While running, `esc` asks to
@@ -159,6 +183,7 @@ ffmpeg -hide_banner -nostdin -i <input>
   the input is already opus/vorbis.
 - Raw args (`--args`, quote-aware, no shell) are inserted right before
   the output path.
+- A File name step adds no arguments: it only changes `<output>`.
 
 The footer's `~<size>` estimate is a rough heuristic: output pixels × fps
 × duration × a per-encoder/CRF bits-per-pixel factor, plus the audio
