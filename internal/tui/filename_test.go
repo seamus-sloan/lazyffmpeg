@@ -165,3 +165,49 @@ func TestInPlaceSessionRefusesToRunWithAFileName(t *testing.T) {
 		t.Errorf("view does not explain the refusal, got:\n%s", out)
 	}
 }
+
+func TestFileNameOfAnExistingFileAsksBeforeOverwriting(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "demo.mov")
+	if err := os.WriteFile(existing, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fake := func(ctx context.Context, job runner.Job, onProgress func(runner.Progress)) (runner.Result, error) {
+		return runner.Result{}, nil
+	}
+	s := app.Session{Input: filepath.Join(dir, "clip.mov"), Info: testInfo()}
+	m := renameTo(t, resized(New(s, WithRunner(fake)), 200, 30), "demo")
+
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	if cmd != nil || m.run.phase != runConfirmOverwrite {
+		t.Fatalf("run.phase = %v (cmd %v), want runConfirmOverwrite with no run started", m.run.phase, cmd != nil)
+	}
+	if want := "Overwrite " + existing + "? (y/n)"; !strings.Contains(viewText(m), want) {
+		t.Errorf("missing overwrite prompt %q, got:\n%s", want, viewText(m))
+	}
+}
+
+func TestFileNameOfTheInputIsRefusedAsTheInputItself(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "clip.mov")
+	if err := os.WriteFile(in, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	fake := func(ctx context.Context, job runner.Job, onProgress func(runner.Progress)) (runner.Result, error) {
+		calls++
+		return runner.Result{}, nil
+	}
+	s := app.Session{Input: in, Info: testInfo(), Force: true}
+	m := renameTo(t, resized(New(s, WithRunner(fake)), 100, 30), "clip")
+
+	mm, cmd := m.Update(key("r"))
+	m = mm.(Model)
+	if cmd != nil || calls != 0 {
+		t.Fatalf("a run started (cmd %v, calls %d) for a name that is the input itself", cmd != nil, calls)
+	}
+	if !strings.Contains(viewText(m), app.ErrSameAsInput.Error()) {
+		t.Errorf("view missing the same-as-input error, got:\n%s", viewText(m))
+	}
+}
