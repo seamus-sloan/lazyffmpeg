@@ -401,6 +401,27 @@ func TestCheckInPlace(t *testing.T) {
 	}
 }
 
+func TestSessionOutputPathPrecedence(t *testing.T) {
+	named := pipeline.New(pipeline.Filename{Name: "demo"})
+	cases := []struct {
+		name string
+		s    app.Session
+		p    pipeline.Pipeline
+		want string
+	}{
+		{"in-place wins over a file name", app.Session{Input: "/v/clip.mov", InPlace: true}, named, "/v/clip.mov"},
+		{"file name, next to the input", app.Session{Input: "/v/clip.mov"}, named, "/v/demo.mov"},
+		{"file name wins over -o, in -o's directory", app.Session{Input: "/v/clip.mov", Output: "/out/x.mp4"}, named, "/out/demo.mov"},
+		{"-o without a file name", app.Session{Input: "/v/clip.mov", Output: "/out/x.mp4"}, pipeline.New(), "/out/x.mp4"},
+		{"default", app.Session{Input: "/v/clip.mov"}, pipeline.New(), "/v/clip (edited).mov"},
+	}
+	for _, c := range cases {
+		if got := c.s.OutputPath(c.p); got != c.want {
+			t.Errorf("%s: OutputPath = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestMainInPlaceContainerMismatchStillErrors(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})

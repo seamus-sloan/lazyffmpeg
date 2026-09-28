@@ -90,16 +90,15 @@ type Session struct {
 }
 
 // OutputPath resolves the final output path for p: InPlace replaces the
-// input; an explicit Output wins next; otherwise it is derived from the
-// pipeline.
+// input; a File name step names the file next (in Output's directory when
+// Output is set); an explicit Output wins after that; otherwise it is
+// derived from the pipeline (see pipeline.OutputPath). The headless path,
+// --dry-run and the TUI all resolve the output here.
 func (s Session) OutputPath(p pipeline.Pipeline) string {
 	if s.InPlace {
 		return s.Input
 	}
-	if s.Output != "" {
-		return s.Output
-	}
-	return pipeline.DefaultOutputPath(s.Input, p)
+	return pipeline.OutputPath(s.Input, s.Output, p)
 }
 
 // App is the headless/TUI entry point.

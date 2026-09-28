@@ -32,18 +32,48 @@ func CanKeepExt(ext string, p Pipeline) bool {
 // <ext> is the container step's extension when p has one, else the input's
 // own extension when CanKeepExt allows it, else ".mp4".
 func DefaultOutputPath(input string, p Pipeline) string {
-	dir := filepath.Dir(input)
 	base := filepath.Base(input)
-	ext := filepath.Ext(base)
-	stem := strings.TrimSuffix(base, ext)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	return filepath.Join(filepath.Dir(input), stem+" (edited)"+defaultExt(input, p))
+}
 
-	if c, ok := p.Find(KindContainer); ok {
-		ext = "." + string(c.(Container).Format)
-	} else if !CanKeepExt(ext, p) {
-		ext = ".mp4"
+// OutputPath resolves where p's encode of input is written, given explicit,
+// the -o path ("" when unset). With a File name step, the file is its name
+// in explicit's directory when explicit is set, else in input's; the name
+// is used as is when it ends in a container extension lazyff writes (which
+// then decides the container, as -o's extension does), and otherwise gets
+// DefaultOutputPath's extension appended ("demo" → "demo.mov" for a .mov
+// input). Without one, explicit wins, else DefaultOutputPath. Replacing
+// the input in place is the caller's to decide first.
+func OutputPath(input, explicit string, p Pipeline) string {
+	if s, ok := p.Find(KindFilename); ok {
+		dir := filepath.Dir(input)
+		if explicit != "" {
+			dir = filepath.Dir(explicit)
+		}
+		name := s.(Filename).Name
+		if EffectiveContainer(name, New()) == "" {
+			name += defaultExt(input, p)
+		}
+		return filepath.Join(dir, name)
 	}
+	if explicit != "" {
+		return explicit
+	}
+	return DefaultOutputPath(input, p)
+}
 
-	return filepath.Join(dir, stem+" (edited)"+ext)
+// defaultExt is the extension a derived output name gets: the container
+// step's when p has one, else input's own when CanKeepExt allows it, else
+// ".mp4".
+func defaultExt(input string, p Pipeline) string {
+	if c, ok := p.Find(KindContainer); ok {
+		return "." + string(c.(Container).Format)
+	}
+	if ext := filepath.Ext(input); CanKeepExt(ext, p) {
+		return ext
+	}
+	return ".mp4"
 }
 
 var bareArgRe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)

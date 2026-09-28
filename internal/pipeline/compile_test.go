@@ -626,6 +626,28 @@ func TestCompileRawArgsBeforeOutput(t *testing.T) {
 	}
 }
 
+func TestCompileFilenameAddsNoArgsAndItsExtensionPicksTheContainer(t *testing.T) {
+	p := New(Filename{Name: "demo.mp4"})
+	out := OutputPath("/v/clip.mov", "", p)
+
+	argv, err := Compile(infoAAC(10), p, Options{Input: "/v/clip.mov", Output: out})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	// Exactly an empty pipeline's argv, written to /v/demo.mp4: the step
+	// itself adds nothing, and the name's extension (not the .mov input's)
+	// decides the container, with no -f.
+	want := "ffmpeg -hide_banner -nostdin -i /v/clip.mov -map 0:V:0 -map 0:a:0 " +
+		"-c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p " +
+		"-c:a copy -movflags +faststart /v/demo.mp4"
+	if got := strings.Join(argv, " "); got != want {
+		t.Errorf("Compile argv = %q, want %q", got, want)
+	}
+	if got := EffectiveContainer(out, p); got != FormatMP4 {
+		t.Errorf("EffectiveContainer(%q) = %v, want FormatMP4", out, got)
+	}
+}
+
 func TestEffectiveCodecDefaultsToWebmVP9(t *testing.T) {
 	if got := EffectiveCodec(New(), FormatWebM); got != CodecVP9 {
 		t.Errorf("EffectiveCodec(no encoder, webm) = %v, want CodecVP9", got)
