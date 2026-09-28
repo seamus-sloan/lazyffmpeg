@@ -648,6 +648,62 @@ func TestCompileFilenameAddsNoArgsAndItsExtensionPicksTheContainer(t *testing.T)
 	}
 }
 
+func TestCompileFilenameExtensionConflictingWithContainerErrors(t *testing.T) {
+	p := New(Container{Format: FormatMP4}, Filename{Name: "demo.mov"})
+	_, err := Compile(infoAAC(10), p, Options{Input: "/v/clip.mov", Output: OutputPath("/v/clip.mov", "", p)})
+	if !errors.Is(err, ErrFilenameContainer) {
+		t.Fatalf("err = %v, want ErrFilenameContainer", err)
+	}
+	for _, want := range []string{"demo.mov", "mp4"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %q, want it to name %q", err, want)
+		}
+	}
+}
+
+func TestCompileFilenameAgreeingWithContainerIsFine(t *testing.T) {
+	cases := []Pipeline{
+		New(Container{Format: FormatMKV}, Filename{Name: "DEMO.MKV"}),
+		New(Container{Format: FormatMP4}, Filename{Name: "demo.m4v"}), // .m4v is mp4
+		New(Container{Format: FormatMKV}, Filename{Name: "demo"}),      // .mkv gets appended
+		New(Container{Format: FormatMKV}, Filename{Name: "demo.gif"}),  // .mkv gets appended
+	}
+	for _, p := range cases {
+		out := OutputPath("/v/clip.mov", "", p)
+		if _, err := Compile(infoAAC(10), p, Options{Input: "/v/clip.mov", Output: out}); err != nil {
+			t.Errorf("Compile(%v) to %q: %v, want nil", p.Steps(), out, err)
+		}
+	}
+}
+
+func TestCompileM4VFilenameNeedsAnEncoderM4VCanHold(t *testing.T) {
+	cases := []struct {
+		codec Codec // "" = no Encoder step
+		ok    bool
+	}{
+		{"", true},
+		{CodecH264, true},
+		{CodecH264HW, true},
+		{CodecCopy, true},
+		{CodecH265, false},
+		{CodecH265HW, false},
+		{CodecAV1, false},
+	}
+	for _, c := range cases {
+		p := New(Filename{Name: "demo.M4V"})
+		if c.codec != "" {
+			p = p.Upsert(Encoder{Codec: c.codec})
+		}
+		_, err := Compile(infoAAC(10), p, Options{Input: "/v/clip.mov", Output: OutputPath("/v/clip.mov", "", p)})
+		if c.ok && err != nil {
+			t.Errorf("demo.M4V with %q: err = %v, want nil", c.codec, err)
+		}
+		if !c.ok && !errors.Is(err, ErrFilenameM4V) {
+			t.Errorf("demo.M4V with %q: err = %v, want ErrFilenameM4V", c.codec, err)
+		}
+	}
+}
+
 func TestEffectiveCodecDefaultsToWebmVP9(t *testing.T) {
 	if got := EffectiveCodec(New(), FormatWebM); got != CodecVP9 {
 		t.Errorf("EffectiveCodec(no encoder, webm) = %v, want CodecVP9", got)

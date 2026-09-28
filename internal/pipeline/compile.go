@@ -25,6 +25,13 @@ var (
 	ErrWebMAudio       = errors.New("webm cannot hold AAC audio")
 	ErrUnknownDuration = errors.New("input duration is unknown")
 	ErrTargetTooSmall  = errors.New("target size leaves under 50 kbps for video")
+
+	// ErrFilenameContainer is returned when a File name step's extension
+	// names a different container than the pipeline's Container step.
+	ErrFilenameContainer = errors.New("file name does not match the container")
+	// ErrFilenameM4V is returned when a File name step names an .m4v file
+	// for video .m4v cannot hold (see CanKeepExt).
+	ErrFilenameM4V = errors.New(".m4v holds only H.264 video or a stream copy")
 )
 
 // Validate reports whether p can be compiled against info and opt, without
@@ -46,6 +53,9 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 		if err := s.Validate(); err != nil {
 			return nil, err
 		}
+	}
+	if err := checkFilename(p); err != nil {
+		return nil, err
 	}
 	if _, err := walkTimeline(steps, info.Duration); err != nil {
 		return nil, err
@@ -137,6 +147,32 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 	argv = append(argv, opt.Output)
 
 	return argv, nil
+}
+
+// checkFilename rejects a File name step whose extension the rest of p
+// contradicts: one naming a container extension lazyff writes that is not
+// the Container step's format, or an .m4v name for video .m4v cannot hold
+// (see CanKeepExt). A name without such an extension gets one appended
+// (see OutputPath), so it cannot conflict.
+func checkFilename(p Pipeline) error {
+	s, ok := p.Find(KindFilename)
+	if !ok {
+		return nil
+	}
+	name := s.(Filename).Name
+	named := EffectiveContainer(name, New())
+	if named == "" {
+		return nil
+	}
+	if c, ok := p.Find(KindContainer); ok && c.(Container).Format != named {
+		return fmt.Errorf("%w: %s is %s, the container is %s", ErrFilenameContainer,
+			name, strings.ToLower(filepath.Ext(name)), c.(Container).Format)
+	}
+	if !CanKeepExt(filepath.Ext(name), p) {
+		return fmt.Errorf("%w (%s with %s); name it .mp4 instead", ErrFilenameM4V,
+			name, EffectiveCodec(p, named))
+	}
+	return nil
 }
 
 // EffectiveContainer resolves the output's container: a Container step
