@@ -665,8 +665,8 @@ func TestCompileFilenameAgreeingWithContainerIsFine(t *testing.T) {
 	cases := []Pipeline{
 		New(Container{Format: FormatMKV}, Filename{Name: "DEMO.MKV"}),
 		New(Container{Format: FormatMP4}, Filename{Name: "demo.m4v"}), // .m4v is mp4
-		New(Container{Format: FormatMKV}, Filename{Name: "demo"}),      // .mkv gets appended
-		New(Container{Format: FormatMKV}, Filename{Name: "demo.gif"}),  // .mkv gets appended
+		New(Container{Format: FormatMKV}, Filename{Name: "demo"}),     // .mkv gets appended
+		New(Container{Format: FormatMKV}, Filename{Name: "demo.gif"}), // .mkv gets appended
 	}
 	for _, p := range cases {
 		out := OutputPath("/v/clip.mov", "", p)
