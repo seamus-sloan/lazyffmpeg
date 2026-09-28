@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/picker"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/units"
@@ -385,6 +387,9 @@ func (m Model) footerLines() ([]string, string) {
 	} else if argv, err := pipeline.Compile(m.session.Info, m.pipeline, opts); err != nil {
 		raw = oneLine(err.Error())
 		colorLine = func(s string) string { return errorStyle.Render(s) }
+	} else if err := m.inPlaceRenameErr(); err != nil {
+		raw = oneLine(err.Error())
+		colorLine = func(s string) string { return errorStyle.Render(s) }
 	} else {
 		raw = pipeline.QuoteCommand(argv)
 	}
@@ -404,6 +409,19 @@ func (m Model) footerLines() ([]string, string) {
 		dimStyle.Render(" → ") + outputPath + "  " + hints
 
 	return commandLines, line2
+}
+
+// inPlaceRenameErr is app.ErrInPlaceRename when an in-place session's
+// pipeline has a File name step, else nil: the refusal a run would meet on
+// r (see tryRun), shown in the footer up front instead.
+func (m Model) inPlaceRenameErr() error {
+	if !m.session.InPlace {
+		return nil
+	}
+	if err := app.CheckInPlace(m.session.Input, m.pipeline); errors.Is(err, app.ErrInPlaceRename) {
+		return err
+	}
+	return nil
 }
 
 // footerLineCount is the number of lines footerLines' command portion

@@ -235,3 +235,23 @@ func TestFooterShowsAFileNameTooLongOnceItsExtensionIsAppended(t *testing.T) {
 		t.Errorf("footer does not show the file-name-too-long error:\n%s", out)
 	}
 }
+
+func TestInPlaceFooterShowsTheRenameRefusalBeforeRunning(t *testing.T) {
+	pl := pipeline.New(pipeline.Filename{Name: "demo.mov"})
+
+	inPlace := testSession(pl)
+	inPlace.InPlace = true
+	out := viewText(resized(New(inPlace), 100, 30))
+	if !strings.Contains(out, app.ErrInPlaceRename.Error()) {
+		t.Errorf("in-place footer does not show the rename refusal:\n%s", out)
+	}
+	if strings.Contains(out, "ffmpeg -hide_banner") {
+		t.Errorf("in-place footer shows a command that can never run:\n%s", out)
+	}
+	assertFits(t, "in-place footer at 80x24", viewText(resized(New(inPlace), 80, 24)), 80, 24)
+
+	out = viewText(resized(New(testSession(pl)), 100, 30))
+	if strings.Contains(out, app.ErrInPlaceRename.Error()) || !strings.Contains(out, "ffmpeg -hide_banner") {
+		t.Errorf("a session writing a new file should show the command, not the refusal:\n%s", out)
+	}
+}
