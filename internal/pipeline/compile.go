@@ -32,6 +32,9 @@ var (
 	// ErrFilenameM4V is returned when a File name step names an .m4v file
 	// for video .m4v cannot hold (see CanKeepExt).
 	ErrFilenameM4V = errors.New(".m4v holds only H.264 video or a stream copy")
+	// ErrFilenameTooLong is returned when a File name step's name is
+	// within the limit as typed but not once its extension is appended.
+	ErrFilenameTooLong = errors.New("file name too long")
 )
 
 // Validate reports whether p can be compiled against info and opt, without
@@ -54,7 +57,7 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 			return nil, err
 		}
 	}
-	if err := checkFilename(p); err != nil {
+	if err := checkFilename(p, opt.Input); err != nil {
 		return nil, err
 	}
 	if _, err := walkTimeline(steps, info.Duration); err != nil {
@@ -153,8 +156,9 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 // contradicts: one naming a container extension lazyff writes that is not
 // the Container step's format, or an .m4v name for video .m4v cannot hold
 // (see CanKeepExt). A name without such an extension gets one appended
-// (see OutputPath), so it cannot conflict.
-func checkFilename(p Pipeline) error {
+// (see OutputPath), so it cannot conflict, but the appended extension can
+// take it over the file-name length limit.
+func checkFilename(p Pipeline, input string) error {
 	s, ok := p.Find(KindFilename)
 	if !ok {
 		return nil
@@ -162,6 +166,10 @@ func checkFilename(p Pipeline) error {
 	name := s.(Filename).Name
 	named := EffectiveContainer(name, New())
 	if named == "" {
+		if file := namedFile(name, input, p); len(file) > maxFilenameBytes {
+			return fmt.Errorf("%w: %d bytes once %s is appended, over the %d-byte limit",
+				ErrFilenameTooLong, len(file), strings.TrimPrefix(file, name), maxFilenameBytes)
+		}
 		return nil
 	}
 	if c, ok := p.Find(KindContainer); ok && c.(Container).Format != named {

@@ -80,8 +80,8 @@ H.264 or `copy`. Any other name gets the default `<ext>` above appended:
 `demo` → `demo.mov` for a `.mov` input, `my.clip` → `my.clip.mov`,
 `demo.gif` → `demo.gif.mp4` for an `.mp4` input. The name is just a file
 name: no `/` or `\`, no leading `.` (that would hide the file), no
-control characters, at most 255 bytes. `--name` and `-o` both set the
-output, so they cannot be combined.
+control characters, at most 255 bytes including any appended extension.
+`--name` and `-o` both set the output, so they cannot be combined.
 
 `--in-place` encodes to a temp file in the same directory and atomically
 replaces the input only after ffmpeg succeeds; it needs a format it can

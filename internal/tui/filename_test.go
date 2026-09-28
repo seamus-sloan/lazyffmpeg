@@ -228,3 +228,10 @@ func TestFileNameModalRejectsAHiddenFileName(t *testing.T) {
 		t.Error("a rejected name was added to the pipeline")
 	}
 }
+
+func TestFooterShowsAFileNameTooLongOnceItsExtensionIsAppended(t *testing.T) {
+	m := resized(New(testSession(pipeline.New(pipeline.Filename{Name: strings.Repeat("n", 252)}))), 100, 30)
+	if out := viewText(m); !strings.Contains(out, "file name too long: 256 bytes once .mov is appended") {
+		t.Errorf("footer does not show the file-name-too-long error:\n%s", out)
+	}
+}

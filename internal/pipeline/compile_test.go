@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -700,6 +701,30 @@ func TestCompileM4VFilenameNeedsAnEncoderM4VCanHold(t *testing.T) {
 		}
 		if !c.ok && !errors.Is(err, ErrFilenameM4V) {
 			t.Errorf("demo.M4V with %q: err = %v, want ErrFilenameM4V", c.codec, err)
+		}
+	}
+}
+
+func TestCompileFilenameLimitAppliesOnceTheExtensionIsAppended(t *testing.T) {
+	cases := []struct {
+		name string
+		ok   bool
+	}{
+		{strings.Repeat("n", 251), true},           // + .mov = 255 bytes
+		{strings.Repeat("n", 252), false},          // + .mov = 256 bytes
+		{strings.Repeat("n", 248) + ".gif", false}, // + .mov = 256 bytes
+		{strings.Repeat("é", 126), false},          // 126 characters but 252 bytes + .mov = 256
+		{strings.Repeat("n", 251) + ".mp4", true},  // used as is: 255 bytes
+	}
+	for _, c := range cases {
+		p := New(Filename{Name: c.name})
+		out := OutputPath("/v/clip.mov", "", p)
+		_, err := Compile(infoAAC(10), p, Options{Input: "/v/clip.mov", Output: out})
+		if c.ok && err != nil {
+			t.Errorf("%d-byte name (%d-byte file %s): err = %v, want nil", len(c.name), len(filepath.Base(out)), filepath.Ext(out), err)
+		}
+		if !c.ok && !errors.Is(err, ErrFilenameTooLong) {
+			t.Errorf("%d-byte name (%d-byte file %s): err = %v, want ErrFilenameTooLong", len(c.name), len(filepath.Base(out)), filepath.Ext(out), err)
 		}
 	}
 }

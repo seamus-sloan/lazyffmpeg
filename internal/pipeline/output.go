@@ -51,16 +51,22 @@ func OutputPath(input, explicit string, p Pipeline) string {
 		if explicit != "" {
 			dir = filepath.Dir(explicit)
 		}
-		name := s.(Filename).Name
-		if EffectiveContainer(name, New()) == "" {
-			name += defaultExt(input, p)
-		}
-		return filepath.Join(dir, name)
+		return filepath.Join(dir, namedFile(s.(Filename).Name, input, p))
 	}
 	if explicit != "" {
 		return explicit
 	}
 	return DefaultOutputPath(input, p)
+}
+
+// namedFile is the file a File name step's name resolves to for input: the
+// name itself when it ends in a container extension lazyff writes, else the
+// name with defaultExt appended.
+func namedFile(name, input string, p Pipeline) string {
+	if EffectiveContainer(name, New()) != "" {
+		return name
+	}
+	return name + defaultExt(input, p)
 }
 
 // defaultExt is the extension a derived output name gets: the container

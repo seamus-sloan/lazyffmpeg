@@ -381,6 +381,23 @@ func TestMainNameOfTheInputItselfIsRefused(t *testing.T) {
 	}
 }
 
+func TestMainNameTooLongOnceItsExtensionIsAppendedFailsBeforeRunning(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Name: "clip.mov", Width: 320, Height: 240, Seconds: 1})
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--name", strings.Repeat("n", 252)})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "file name too long: 256 bytes once .mov is appended") {
+		t.Errorf("stderr = %q, want the file-name-too-long error", errOut.String())
+	}
+	if strings.Contains(errOut.String(), "ffmpeg failed") || out.Len() != 0 {
+		t.Errorf("ffmpeg ran (stdout %q, stderr %q)", out.String(), errOut.String())
+	}
+}
+
 func TestMainSameAsInput(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
