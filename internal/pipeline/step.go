@@ -496,9 +496,9 @@ func (f Filename) Validate() error {
 	case f.Name == "":
 		return invalidf("file name must not be empty")
 	case f.Name == "." || f.Name == "..":
-		return invalidf("file name %q is not a file", f.Name)
+		return invalidf("file name cannot be %q", f.Name)
 	case strings.ContainsAny(f.Name, `/\`):
-		return invalidf("file name %q must not contain / or \\ (it names a file, not a path)", f.Name)
+		return invalidf("file name must not contain / or \\ (not a path): %q", f.Name)
 	case len(f.Name) > maxFilenameBytes:
 		return invalidf("file name is %d bytes, over the %d-byte limit", len(f.Name), maxFilenameBytes)
 	}
