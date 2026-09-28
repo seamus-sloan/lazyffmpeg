@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
@@ -208,6 +209,31 @@ func TestParseAllStepFlags(t *testing.T) {
 	}
 }
 
+func TestParseNameFlag(t *testing.T) {
+	cases := map[string][]string{
+		"demo":     {"in.mov", "--name", "demo"},
+		"demo.mp4": {"in.mov", "--name=demo.mp4"},
+		"My Clip":  {"in.mov", "--name", "  My Clip  "},
+	}
+	for want, args := range cases {
+		cfg, err := Parse(args)
+		if err != nil {
+			t.Errorf("Parse(%q): %v", args, err)
+			continue
+		}
+		if !cfg.HasSteps {
+			t.Errorf("Parse(%q): HasSteps = false, want true", args)
+		}
+		f := mustFind(t, cfg.Pipeline, pipeline.KindFilename).(pipeline.Filename)
+		if f.Name != want {
+			t.Errorf("Parse(%q): Filename.Name = %q, want %q", args, f.Name, want)
+		}
+		if cfg.Output != "" {
+			t.Errorf("Parse(%q): Output = %q, want empty (a name is not -o)", args, cfg.Output)
+		}
+	}
+}
+
 func TestParseTargetSize(t *testing.T) {
 	cfg, err := Parse([]string{"in.mov", "--target-size", "20MB"})
 	if err != nil {
@@ -362,6 +388,46 @@ func TestParseUsageErrors(t *testing.T) {
 	}
 }
 
+func TestParseNameWithOutputIsAUsageError(t *testing.T) {
+	for _, args := range [][]string{
+		{"in.mov", "--name", "demo", "-o", "out.mp4"},
+		{"in.mov", "-o", "out.mp4", "--name", "demo"},
+	} {
+		_, err := Parse(args)
+		if !errors.Is(err, ErrUsage) {
+			t.Errorf("Parse(%q): err = %v, want ErrUsage", args, err)
+			continue
+		}
+		if want := "--name and -o both set the output; use one"; !strings.Contains(err.Error(), want) {
+			t.Errorf("Parse(%q): err = %q, want it to say %q", args, err, want)
+		}
+	}
+}
+
+func TestParseNameWithInPlaceIsAUsageError(t *testing.T) {
+	for _, args := range [][]string{
+		{"in.mov", "--name", "demo", "--in-place"},
+		{"in.mov", "--in-place", "--name=demo.mov"},
+	} {
+		_, err := Parse(args)
+		if !errors.Is(err, ErrUsage) {
+			t.Errorf("Parse(%q): err = %v, want ErrUsage", args, err)
+			continue
+		}
+		if !strings.Contains(err.Error(), "--in-place") || !strings.Contains(err.Error(), "--name") {
+			t.Errorf("Parse(%q): err = %q, want it to name --name and --in-place", args, err)
+		}
+	}
+}
+
+func TestParseInvalidNameIsAUsageError(t *testing.T) {
+	for _, name := range []string{"", "  ", "..", "clips/demo.mp4"} {
+		if _, err := Parse([]string{"in.mov", "--name", name}); !errors.Is(err, ErrUsage) {
+			t.Errorf("--name %q: err = %v, want ErrUsage", name, err)
+		}
+	}
+}
+
 func TestParseInPlaceSameContainerOK(t *testing.T) {
 	_, err := Parse([]string{"in.mkv", "--in-place", "--container", "mkv"})
 	if err != nil {
@@ -411,6 +477,16 @@ func TestUsageListsFlags(t *testing.T) {
 		if !contains(Usage, flag) {
 			t.Errorf("Usage missing %q", flag)
 		}
+	}
+}
+
+func TestUsageListsNameUnderStepFlags(t *testing.T) {
+	stepFlags, _, ok := strings.Cut(Usage, "Other flags:")
+	if !ok {
+		t.Fatal("Usage has no \"Other flags:\" section")
+	}
+	if !strings.Contains(stepFlags, "--name NAME") {
+		t.Errorf("Usage's step flags do not list --name NAME:\n%s", stepFlags)
 	}
 }
 

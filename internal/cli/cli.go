@@ -50,6 +50,9 @@ Step flags (applied to the pipeline in the order given):
   --target-size SIZE      target output size, e.g. 20MB
   --audio MODE            keep, remove, aac[:BITRATE]
   --container FMT         mp4, mov, mkv, webm
+  --name NAME             output file name, next to the input; a
+                          .mp4/.mov/.mkv/.webm/.m4v ending sets the
+                          container, else the default one is appended
   --args "..."            extra raw ffmpeg arguments
 
 Other flags:
@@ -66,7 +69,7 @@ var valueFlagNames = map[string]bool{
 	"--width": true, "--height": true, "--scale": true, "--speed": true,
 	"--trim-start": true, "--trim-end": true, "--fps": true, "--encoder": true,
 	"--crf": true, "--target-size": true, "--audio": true, "--container": true,
-	"--args": true, "-o": true,
+	"--name": true, "--args": true, "-o": true,
 }
 
 var boolFlagNames = map[string]bool{
@@ -193,6 +196,12 @@ func Parse(args []string) (Config, error) {
 
 	if pr.seen["-o"] && pr.cfg.InPlace {
 		return Config{}, usageErr("-o cannot be combined with --in-place")
+	}
+	if pr.seen["--name"] && pr.seen["-o"] {
+		return Config{}, usageErr("--name and -o both set the output; use one")
+	}
+	if pr.seen["--name"] && pr.cfg.InPlace {
+		return Config{}, usageErr("--name cannot be combined with --in-place (renaming in place would delete the original)")
 	}
 	if pr.cfg.TUI && pr.cfg.DryRun {
 		return Config{}, usageErr("--tui cannot be combined with --dry-run")
@@ -353,6 +362,14 @@ func (pr *parser) applyValue(name, val string) error {
 			return usageErr("invalid value for --container: %q", val)
 		}
 		pr.pl = pr.pl.Upsert(c)
+		pr.cfg.HasSteps = true
+
+	case "--name":
+		f, err := pipeline.ParseFilename(val)
+		if err != nil {
+			return usageErr("invalid value for --name: %v", err)
+		}
+		pr.pl = pr.pl.Upsert(f)
 		pr.cfg.HasSteps = true
 
 	case "--args":

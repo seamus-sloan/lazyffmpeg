@@ -296,6 +296,85 @@ func TestMainOutputExistsWithForce(t *testing.T) {
 	}
 }
 
+func TestMainNameWritesThatFileNextToTheInput(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Name: "clip.mov", Width: 320, Height: 240, Seconds: 1})
+	dir := filepath.Dir(in)
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--name", "demo.mp4"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0, stderr=%s", code, errOut.String())
+	}
+	want := filepath.Join(dir, "demo.mp4")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("output not created at %q: %v", want, err)
+	}
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("stdout = %q, want it to report %q", out.String(), want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "clip (edited).mov")); err == nil {
+		t.Error("the default (edited) output was written as well")
+	}
+}
+
+func TestMainNameDryRunPrintsTheNamedPath(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Name: "clip.mov", Width: 320, Height: 240, Seconds: 1})
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--name", "demo", "--dry-run"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0, stderr=%s", code, errOut.String())
+	}
+	want := filepath.Join(filepath.Dir(in), "demo.mov")
+	if !strings.HasSuffix(strings.TrimSpace(out.String()), pipeline.QuoteCommand([]string{want})) {
+		t.Errorf("stdout = %q, want the command to end in %q", out.String(), want)
+	}
+}
+
+func TestMainNameOfAnExistingFileNeedsForce(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+	existing := filepath.Join(filepath.Dir(in), "demo.mp4")
+	if err := os.WriteFile(existing, []byte("marker"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--name", "demo"})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "output exists") || !strings.Contains(errOut.String(), existing) {
+		t.Errorf("stderr = %q, want an output-exists error naming %q", errOut.String(), existing)
+	}
+	if got, _ := os.ReadFile(existing); string(got) != "marker" {
+		t.Error("existing file was modified without --force")
+	}
+}
+
+func TestMainNameOfTheInputItselfIsRefused(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+	before, err := os.ReadFile(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--name", "clip", "--force"})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), app.ErrSameAsInput.Error()) {
+		t.Errorf("stderr = %q, want the same-as-input error", errOut.String())
+	}
+	if after, err := os.ReadFile(in); err != nil || !bytes.Equal(before, after) {
+		t.Errorf("input should be untouched (err=%v)", err)
+	}
+}
+
 func TestMainSameAsInput(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe")
 	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
