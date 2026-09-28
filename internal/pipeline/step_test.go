@@ -3,6 +3,7 @@ package pipeline
 import (
 	"errors"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -430,5 +431,40 @@ func TestRawArgsValidate(t *testing.T) {
 func TestRawArgsSummary(t *testing.T) {
 	if got := (RawArgs{Text: "-map_metadata -1"}).Summary(); got != "-map_metadata -1" {
 		t.Errorf("Summary = %q, want verbatim text", got)
+	}
+}
+
+// --- Filename ---
+
+func TestKindFilenameIsAnOutputSettingLabelledFileName(t *testing.T) {
+	if KindFilename.IsFilter() {
+		t.Error("KindFilename.IsFilter() = true, want false")
+	}
+	if got := KindFilename.Label(); got != "File name" {
+		t.Errorf("KindFilename.Label() = %q, want %q", got, "File name")
+	}
+	if got := (Filename{Name: "demo"}).Kind(); got != KindFilename {
+		t.Errorf("Filename.Kind() = %v, want KindFilename", got)
+	}
+}
+
+func TestFilenameValidate(t *testing.T) {
+	valid := []string{"demo", "demo.mp4", "my.clip", "Screen Recording at 1.02 PM (edited).mov", "...", strings.Repeat("n", 255)}
+	for _, name := range valid {
+		if err := (Filename{Name: name}).Validate(); err != nil {
+			t.Errorf("Validate(%q) = %v, want nil", name, err)
+		}
+	}
+	invalid := []string{"", ".", "..", "a/b", "/abs.mp4", "sub/", `a\b`, strings.Repeat("n", 256)}
+	for _, name := range invalid {
+		if err := (Filename{Name: name}).Validate(); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("Validate(%q) = %v, want ErrInvalidStep", name, err)
+		}
+	}
+}
+
+func TestFilenameSummaryIsTheNameAsGiven(t *testing.T) {
+	if got := (Filename{Name: "My Clip.MOV"}).Summary(); got != "My Clip.MOV" {
+		t.Errorf("Summary = %q, want %q", got, "My Clip.MOV")
 	}
 }

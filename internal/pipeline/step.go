@@ -27,6 +27,7 @@ const (
 	KindQuality
 	KindAudio
 	KindContainer
+	KindFilename
 	KindRawArgs
 )
 
@@ -58,6 +59,8 @@ func (k Kind) Label() string {
 		return "Audio"
 	case KindContainer:
 		return "Container"
+	case KindFilename:
+		return "File name"
 	case KindRawArgs:
 		return "Raw args"
 	}
@@ -472,6 +475,38 @@ func (c Container) Validate() error {
 
 func (c Container) Summary() string {
 	return string(c.Format)
+}
+
+// maxFilenameBytes is the longest file name the file systems lazyff
+// writes to accept.
+const maxFilenameBytes = 255
+
+// Filename names the output file. It contributes no ffmpeg arguments: it
+// only changes the output path (see OutputPath), written next to the input
+// (or in -o's directory), with the default extension appended unless Name
+// already ends in one of the container extensions lazyff writes.
+type Filename struct {
+	Name string
+}
+
+func (Filename) Kind() Kind { return KindFilename }
+
+func (f Filename) Validate() error {
+	switch {
+	case f.Name == "":
+		return invalidf("file name must not be empty")
+	case f.Name == "." || f.Name == "..":
+		return invalidf("file name %q is not a file", f.Name)
+	case strings.ContainsAny(f.Name, `/\`):
+		return invalidf("file name %q must not contain / or \\ (it names a file, not a path)", f.Name)
+	case len(f.Name) > maxFilenameBytes:
+		return invalidf("file name is %d bytes, over the %d-byte limit", len(f.Name), maxFilenameBytes)
+	}
+	return nil
+}
+
+func (f Filename) Summary() string {
+	return f.Name
 }
 
 // RawArgs inserts extra ffmpeg arguments immediately before the output

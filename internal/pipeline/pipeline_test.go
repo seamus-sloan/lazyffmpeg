@@ -67,6 +67,20 @@ func TestPipelineOutputsCanonicalOrder(t *testing.T) {
 	}
 }
 
+func TestPipelineListsFileNameAfterContainerBeforeRawArgs(t *testing.T) {
+	p := New(
+		RawArgs{Text: "-an", Args: []string{"-an"}},
+		Filename{Name: "demo.mp4"},
+		Container{Format: FormatMP4},
+		Encoder{Codec: CodecH264},
+	)
+	got := kindsOf(p.Steps())
+	want := []Kind{KindEncoder, KindContainer, KindFilename, KindRawArgs}
+	if !kindsEqual(got, want) {
+		t.Errorf("Steps() kinds = %v, want %v", got, want)
+	}
+}
+
 func TestPipelineFiltersBeforeOutputs(t *testing.T) {
 	p := New(Encoder{Codec: CodecH264}, Speed{Factor: 2})
 	got := kindsOf(p.Steps())

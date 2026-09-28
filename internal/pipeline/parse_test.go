@@ -277,6 +277,33 @@ func TestParseContainerErrors(t *testing.T) {
 	}
 }
 
+func TestParseFilename(t *testing.T) {
+	cases := map[string]string{
+		"demo":                 "demo",
+		"  demo.mp4  ":         "demo.mp4",
+		"\tMy Clip (v2).mov\n": "My Clip (v2).mov",
+		"my.clip":              "my.clip",
+	}
+	for in, want := range cases {
+		got, err := ParseFilename(in)
+		if err != nil {
+			t.Errorf("ParseFilename(%q) unexpected error: %v", in, err)
+			continue
+		}
+		if got.Name != want {
+			t.Errorf("ParseFilename(%q) = %q, want %q", in, got.Name, want)
+		}
+	}
+}
+
+func TestParseFilenameErrors(t *testing.T) {
+	for _, in := range []string{"", "   ", ".", " .. ", "clips/demo.mp4", `clips\demo`} {
+		if _, err := ParseFilename(in); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("ParseFilename(%q) error = %v, want ErrInvalidStep", in, err)
+		}
+	}
+}
+
 func TestSplitArgs(t *testing.T) {
 	cases := []struct {
 		in   string

@@ -215,6 +215,15 @@ func ParseContainer(s string) (Container, error) {
 	return Container{}, fmt.Errorf("%w: %q", ErrInvalidStep, s)
 }
 
+// ParseFilename parses an output file name, trimming surrounding space.
+func ParseFilename(s string) (Filename, error) {
+	f := Filename{Name: strings.TrimSpace(s)}
+	if err := f.Validate(); err != nil {
+		return Filename{}, err
+	}
+	return f, nil
+}
+
 // SplitArgs splits a raw-args string into argv elements, honoring single
 // quotes (fully literal), double quotes (where backslash escapes only `"`
 // and `\`; any other `\x` keeps its backslash), and backslash escapes
