@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -189,8 +190,24 @@ func parseFrameRate(s string) float64 {
 	return num / den
 }
 
+// imageExts are the still-image file extensions (lowercase, with the
+// leading dot) lazyff opens as images rather than videos.
+var imageExts = map[string]bool{
+	".png": true, ".jpg": true, ".jpeg": true, ".avif": true, ".webp": true,
+	".bmp": true, ".tif": true, ".tiff": true, ".heic": true, ".heif": true,
+}
+
+// IsImage reports whether path names a still image, by its extension
+// (case-insensitively). ffprobe describes an image as a one-frame video
+// stream, and some image formats (AVIF, HEIC) as the same container an MP4
+// is, so the extension is what tells an image from a video.
+func IsImage(path string) bool {
+	return imageExts[strings.ToLower(filepath.Ext(path))]
+}
+
 // Run execs `ffprobe -v error -print_format json -show_format -show_streams
-// <path>` and parses its output.
+// <path>` and parses its output. An image (see IsImage) has no duration,
+// whatever ffprobe says.
 func Run(ctx context.Context, path string) (Info, error) {
 	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", path)
 	var stdout, stderr bytes.Buffer
@@ -204,5 +221,8 @@ func Run(ctx context.Context, path string) (Info, error) {
 		return Info{}, err
 	}
 	info.Path = path
+	if IsImage(path) {
+		info.Duration = 0
+	}
 	return info, nil
 }

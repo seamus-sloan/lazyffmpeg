@@ -275,15 +275,24 @@ func (m Model) leftColumnLines() []string {
 	return lines
 }
 
+// infoLine is the line under the preview: its position in the input
+// (left out for an image, which has none) and the input's size, codec and
+// file size.
 func (m Model) infoLine() string {
 	info := m.session.Info
-	pos := units.FormatClock(m.preview.time)
-	total := units.FormatClock(info.Duration)
 	dims := fmt.Sprintf("%d×%d", info.Video.Width, info.Video.Height)
 	codec := codecLabel(info.Video.Codec)
 	size := units.FormatSize(info.SizeBytes)
-	return timeStyle.Render(pos) + dimStyle.Render(" / ") + timeStyle.Render(total) +
-		"  " + titleStyle.Render(dims) + sep + outputStyle.Render(codec) + sep + sizeStyle.Render(size)
+	if m.isImage() {
+		// "PNG", "JPEG", "AVIF": an image's format says more than its
+		// codec (an AVIF's is AV1, a HEIC's HEVC).
+		codec = strings.ToUpper(strings.TrimPrefix(filepath.Ext(m.session.Input), "."))
+		return titleStyle.Render(dims) + sep + outputStyle.Render(codec) + sep + sizeStyle.Render(size)
+	}
+	about := titleStyle.Render(dims) + sep + outputStyle.Render(codec) + sep + sizeStyle.Render(size)
+	pos := units.FormatClock(m.preview.time)
+	total := units.FormatClock(info.Duration)
+	return timeStyle.Render(pos) + dimStyle.Render(" / ") + timeStyle.Render(total) + "  " + about
 }
 
 // panelHeading renders a panel title: accented when that panel has focus,
@@ -358,18 +367,15 @@ func (m Model) menuLines() []string {
 		idx++
 	}
 
-	// menuSectionHeadings names the heading inserted right before the
-	// menuKinds item at that index (0 = "Video", the first section, so it
-	// gets no separating blank line; every later heading does).
-	menuSectionHeadings := map[int]string{0: "Video", 4: "Output"}
-	for i, k := range menuKinds {
-		if h, ok := menuSectionHeadings[i]; ok {
-			if i > 0 {
-				lines = append(lines, "")
-			}
-			lines = append(lines, kindStyle(k).Render(h))
+	// Every section but the first gets a blank line above its heading.
+	for i, s := range m.menuSections() {
+		if i > 0 {
+			lines = append(lines, "")
 		}
-		addItem(menuItemLabel(k), lipgloss.NewStyle())
+		lines = append(lines, kindStyle(s.kinds[0]).Render(s.heading))
+		for _, k := range s.kinds {
+			addItem(menuItemLabel(k), lipgloss.NewStyle())
+		}
 	}
 	lines = append(lines, "")
 	addItem("Run", successStyle)
@@ -413,6 +419,11 @@ func (m Model) footerLines() ([]string, string) {
 	hints := hintLine("r", "run", "tab", "focus", "?", "help", "q", "quit")
 	line2 := sizeStyle.Bold(true).Render("~"+sizeStr) + sep + timeStyle.Render(durStr) +
 		dimStyle.Render(" → ") + outputPath + "  " + hints
+	if m.isImage() {
+		// An image has no duration, and no size estimate (see
+		// pipeline.ErrNoImageEstimate).
+		line2 = dimStyle.Render("→ ") + outputPath + "  " + hints
+	}
 
 	return commandLines, line2
 }
@@ -487,7 +498,7 @@ func (m Model) helpText() string {
 			"?", "toggle this help",
 		)
 	}
-	return helpTable(13,
+	pairs := []string{
 		"tab", "switch focus between MENU and PIPELINE",
 		"j/k, ↑/↓", "move the cursor",
 		"enter", "open the selected step's modal",
@@ -497,15 +508,23 @@ func (m Model) helpText() string {
 		"u", "undo the last pipeline change",
 		"c", "toggle the full command in the footer",
 		"r", "run",
-		"l/h, L/H", "seek the preview ±1s, ±5s",
-		"v", "toggle original/result preview",
-		"space", "play/pause the preview",
-		"i/o", "set the trim start/end at the preview position",
+	}
+	if !m.isImage() {
+		pairs = append(pairs, "l/h, L/H", "seek the preview ±1s, ±5s")
+	}
+	pairs = append(pairs, "v", "toggle original/result preview")
+	if !m.isImage() {
+		pairs = append(pairs,
+			"space", "play/pause the preview",
+			"i/o", "set the trim start/end at the preview position")
+	}
+	pairs = append(pairs,
 		"y", "copy the preview's frame as text symbols",
 		"esc", "cancel a modal, or answer no to a confirmation",
 		"q, ctrl+c", "quit",
 		"?", "toggle this help",
 	)
+	return helpTable(13, pairs...)
 }
 
 // helpTable lays out key/description pairs under a "Keys" heading, each
@@ -561,7 +580,7 @@ func (m Model) pickerBodyLines() []string {
 
 	hasParent := m.pickerHasParentRow()
 	if len(entries) == 0 {
-		lines := append(header, dimStyle.Render(fmt.Sprintf("No video files in %s", m.picker.dir)))
+		lines := append(header, dimStyle.Render(fmt.Sprintf("No video or image files in %s", m.picker.dir)))
 		if hasParent {
 			lines = append(lines, keyStyle.Render("backspace")+dimStyle.Render(": go up a directory"))
 		}

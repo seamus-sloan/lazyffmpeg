@@ -95,6 +95,11 @@ type previewTickMsg struct{ gen int }
 
 const previewTickInterval = 125 * time.Millisecond
 
+// timelineKeys are the main screen's keys that move or use the preview's
+// position: seeking, playback and setting trim bounds. An image has no
+// timeline, so they do nothing for one.
+var timelineKeys = map[string]bool{"l": true, "h": true, "L": true, "H": true, "space": true, "i": true, "o": true}
+
 func previewTickCmd(gen int) tea.Cmd {
 	return tea.Tick(previewTickInterval, func(time.Time) tea.Msg { return previewTickMsg{gen: gen} })
 }

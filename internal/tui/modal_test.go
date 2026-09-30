@@ -9,7 +9,7 @@ import (
 
 func openMenu(t *testing.T, m Model, kind pipeline.Kind) Model {
 	t.Helper()
-	for i, k := range menuKinds {
+	for i, k := range m.menuKinds() {
 		if k == kind {
 			m.menuCursor = i
 			break

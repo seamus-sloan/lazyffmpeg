@@ -58,7 +58,8 @@ var (
 // input's own path, so a rename would mean deleting the original), a
 // Container step's format must match input's own extension (in-place never
 // changes the container), and when there is no Container step, input's own
-// extension must be able to hold p's encode (pipeline.CanKeepExt). It is
+// extension must be able to hold p's encode (pipeline.CanKeepExt); an image
+// input's own format must be one lazyff writes (pipeline.ImageFormatOf). It is
 // the single rule the headless path, --dry-run and the TUI's run
 // confirmation all enforce, so an --in-place run never silently writes a
 // different container over the original file. An unsupported format's
@@ -66,6 +67,14 @@ var (
 func CheckInPlace(input string, p pipeline.Pipeline) error {
 	if _, ok := p.Find(pipeline.KindFilename); ok {
 		return ErrInPlaceRename
+	}
+	if probe.IsImage(input) {
+		if pipeline.ImageFormatOf(input) == "" {
+			suggestion := pipeline.QuoteCommand([]string{strings.TrimSuffix(input, filepath.Ext(input)) + ".png"})
+			return fmt.Errorf("%w (%s); write a new file with -o %s instead", ErrInPlaceUnsupportedExt,
+				strings.ToLower(filepath.Ext(input)), suggestion)
+		}
+		return nil
 	}
 	ext := filepath.Ext(input)
 	inputExt := strings.ToLower(ext)
@@ -309,9 +318,13 @@ func (a App) printSymbols(ctx context.Context, input string, info probe.Info, cf
 			units.FormatClock(cfg.SymbolsTime), units.FormatClock(info.Duration))
 		return 1
 	}
+	t := cfg.SymbolsTime
+	if probe.IsImage(input) {
+		t = 0 // an image has one frame, whatever time was asked for
+	}
 	text, err := preview.Render(ctx, preview.Request{
 		Input: input,
-		Time:  cfg.SymbolsTime,
+		Time:  t,
 		Cols:  cfg.SymbolsWidth,
 		Plain: true,
 	})

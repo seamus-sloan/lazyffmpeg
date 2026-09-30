@@ -95,3 +95,20 @@ func Make(t testing.TB, s Spec) string {
 	}
 	return path
 }
+
+// MakeImage generates a width x height still image of ffmpeg's lavfi
+// testsrc pattern, in the format name's extension names (.png, .jpg, ...),
+// and returns its absolute path inside t.TempDir().
+func MakeImage(t testing.TB, name string, width, height int) string {
+	t.Helper()
+	RequireTools(t, "ffmpeg", "ffprobe")
+
+	path := filepath.Join(t.TempDir(), name)
+	src := fmt.Sprintf("testsrc=size=%dx%d", width, height)
+	out, err := exec.Command("ffmpeg", "-hide_banner", "-nostdin", "-f", "lavfi", "-i", src,
+		"-frames:v", "1", "-update", "1", path).CombinedOutput()
+	if err != nil {
+		t.Fatalf("testclip: ffmpeg failed: %v\n%s", err, out)
+	}
+	return path
+}

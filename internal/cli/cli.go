@@ -44,6 +44,8 @@ const DefaultSymbolsWidth = 100
 const Usage = `Usage: lazyff [<input>] [flags]
 
 If <input> is omitted, or is a directory, lazyff opens a file picker there.
+<input> may be a video or a still image (png, jpg, avif, webp, heic, tif,
+bmp); an image takes only the steps that apply to one.
 
 Step flags (applied to the pipeline in the order given):
   --width N              target width in pixels

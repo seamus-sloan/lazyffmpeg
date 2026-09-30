@@ -1,4 +1,5 @@
-// Package picker lists a directory's usable video files and sub-directories.
+// Package picker lists a directory's usable video and image files and
+// sub-directories.
 package picker
 
 import (
@@ -7,10 +8,12 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 )
 
 // Entry is one row in a directory listing: a sub-directory or a usable
-// video file.
+// video or image file.
 type Entry struct {
 	Name    string
 	Path    string
@@ -19,8 +22,8 @@ type Entry struct {
 	ModTime time.Time
 }
 
-// usableExts are the file extensions (lowercase, with the leading dot)
-// lazyff can open.
+// usableExts are the video file extensions (lowercase, with the leading
+// dot) lazyff can open; images are probe.IsImage's.
 var usableExts = map[string]bool{
 	".mp4": true, ".m4v": true, ".mov": true, ".qt": true, ".mkv": true,
 	".webm": true, ".avi": true, ".wmv": true, ".asf": true, ".flv": true,
@@ -29,11 +32,11 @@ var usableExts = map[string]bool{
 	".ogv": true, ".mxf": true, ".dv": true, ".y4m": true, ".gif": true,
 }
 
-// Usable reports whether name's extension is one lazyff can open,
-// case-insensitively. Names without a recognized extension (including no
-// extension at all) are not usable.
+// Usable reports whether name's extension is one lazyff can open, a video
+// or an image, case-insensitively. Names without a recognized extension
+// (including no extension at all) are not usable.
 func Usable(name string) bool {
-	return usableExts[strings.ToLower(filepath.Ext(name))]
+	return usableExts[strings.ToLower(filepath.Ext(name))] || probe.IsImage(name)
 }
 
 // List returns dir's entries: sub-directories first (alphabetical,

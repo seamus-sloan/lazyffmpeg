@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"errors"
 	"math"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
@@ -22,6 +23,10 @@ type SizeEstimate struct {
 	Kind     EstimateKind
 }
 
+// ErrNoImageEstimate is Estimate's error for an image input: an image's
+// size depends on its content far more than on its dimensions.
+var ErrNoImageEstimate = errors.New("no size estimate for an image")
+
 // Estimate predicts the output size for info/p/opt. Target-size pipelines
 // return the target exactly; encoder copy scales the input bitrate by the
 // output duration; everything else uses a per-codec/CRF bits-per-pixel
@@ -29,6 +34,9 @@ type SizeEstimate struct {
 func Estimate(info probe.Info, p Pipeline, opt Options) (SizeEstimate, error) {
 	if err := Validate(info, p, opt); err != nil {
 		return SizeEstimate{}, err
+	}
+	if probe.IsImage(opt.Input) {
+		return SizeEstimate{}, ErrNoImageEstimate
 	}
 	dur := OutputDuration(info, p)
 

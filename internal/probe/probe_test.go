@@ -188,3 +188,28 @@ func TestMakeNameWithSpacesAndNarrowSpace(t *testing.T) {
 		t.Fatalf("clip not created: %v", err)
 	}
 }
+
+func TestIsImage(t *testing.T) {
+	cases := map[string]bool{
+		"a.png": true, "a.JPG": true, "a.jpeg": true, "a.avif": true, "a.webp": true,
+		"a.bmp": true, "a.tif": true, "a.tiff": true, "a.heic": true, "a.heif": true,
+		"a.mp4": false, "a.gif": false, "a.mov": false, "png": false, "": false,
+	}
+	for path, want := range cases {
+		if got := IsImage(path); got != want {
+			t.Errorf("IsImage(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+func TestRunGivesAnImageNoDuration(t *testing.T) {
+	path := testclip.MakeImage(t, "still.jpg", 64, 48)
+
+	info, err := Run(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if info.Duration != 0 || info.Video.Width != 64 || info.Video.Height != 48 {
+		t.Errorf("info = %+v, want a 64x48 image with no duration", info)
+	}
+}

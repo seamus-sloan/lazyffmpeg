@@ -97,7 +97,7 @@ func screensOf(base Model) map[string]Model {
 
 	fileName := base
 	fileName.focus = focusMenu
-	for i, k := range menuKinds {
+	for i, k := range fileName.menuKinds() {
 		if k == pipeline.KindFilename {
 			fileName.menuCursor = i
 		}

@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 )
 
 // CanKeepExt reports whether an output named with extension ext (with its
@@ -30,7 +32,9 @@ func CanKeepExt(ext string, p Pipeline) bool {
 
 // DefaultOutputPath returns "<dir>/<stem> (edited).<ext>" for input, where
 // <ext> is the container step's extension when p has one, else the input's
-// own extension when CanKeepExt allows it, else ".mp4".
+// own extension when CanKeepExt allows it, else ".mp4". For an image input
+// it is the input's own extension when lazyff writes that format, else
+// ".png".
 func DefaultOutputPath(input string, p Pipeline) string {
 	base := filepath.Base(input)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
@@ -60,10 +64,15 @@ func OutputPath(input, explicit string, p Pipeline) string {
 }
 
 // namedFile is the file a File name step's name resolves to for input: the
-// name itself when it ends in a container extension lazyff writes, else the
-// name with defaultExt appended.
+// name itself when it ends in a container extension lazyff writes (an image
+// extension lazyff writes, for an image input), else the name with
+// defaultExt appended.
 func namedFile(name, input string, p Pipeline) string {
-	if EffectiveContainer(name, New()) != "" {
+	if probe.IsImage(input) {
+		if ImageFormatOf(name) != "" {
+			return name
+		}
+	} else if EffectiveContainer(name, New()) != "" {
 		return name
 	}
 	return name + defaultExt(input, p)
@@ -71,8 +80,11 @@ func namedFile(name, input string, p Pipeline) string {
 
 // defaultExt is the extension a derived output name gets: the container
 // step's when p has one, else input's own when CanKeepExt allows it, else
-// ".mp4".
+// ".mp4"; for an image input, defaultImageExt's.
 func defaultExt(input string, p Pipeline) string {
+	if probe.IsImage(input) {
+		return defaultImageExt(input)
+	}
 	if c, ok := p.Find(KindContainer); ok {
 		return "." + string(c.(Container).Format)
 	}

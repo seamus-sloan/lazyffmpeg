@@ -857,3 +857,78 @@ func TestMainSymbolsNeedsAnInputFile(t *testing.T) {
 		t.Errorf("stderr = %q", errOut.String())
 	}
 }
+
+// imageSize probes path's width and height.
+func imageSize(t *testing.T, path string) (int, int) {
+	t.Helper()
+	info, err := probe.Run(context.Background(), path)
+	if err != nil {
+		t.Fatalf("probing %s: %v", path, err)
+	}
+	return info.Video.Width, info.Video.Height
+}
+
+func TestMainHeadlessResizesAnImage(t *testing.T) {
+	in := testclip.MakeImage(t, "pic.png", 320, 240)
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--width", "160"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr %q)", code, errOut.String())
+	}
+	want := filepath.Join(filepath.Dir(in), "pic (edited).png")
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("stdout = %q, want it to name %s", out.String(), want)
+	}
+	if w, h := imageSize(t, want); w != 160 || h != 120 {
+		t.Errorf("wrote a %dx%d image, want 160x120", w, h)
+	}
+}
+
+func TestMainHeadlessConvertsAnImageByName(t *testing.T) {
+	for _, name := range []string{"out.jpg", "out.avif", "out.tif", "out.bmp"} {
+		in := testclip.MakeImage(t, "pic.png", 64, 48)
+		a, _, errOut := newApp()
+		if code := a.Main(context.Background(), []string{in, "--name", name}); code != 0 {
+			t.Errorf("%s: exit code = %d, want 0 (stderr %q)", name, code, errOut.String())
+			continue
+		}
+		if w, h := imageSize(t, filepath.Join(filepath.Dir(in), name)); w != 64 || h != 48 {
+			t.Errorf("%s: wrote %dx%d, want 64x48", name, w, h)
+		}
+	}
+}
+
+func TestMainHeadlessRefusesVideoStepsOnAnImage(t *testing.T) {
+	in := testclip.MakeImage(t, "pic.png", 64, 48)
+	a, _, errOut := newApp()
+	if code := a.Main(context.Background(), []string{in, "--speed", "2"}); code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "Speed does not apply to an image") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}
+
+func TestCheckInPlaceOnImages(t *testing.T) {
+	if err := app.CheckInPlace("pic.jpg", pipeline.New(pipeline.Resolution{Percent: 50})); err != nil {
+		t.Errorf("in place on a .jpg: err = %v, want nil", err)
+	}
+	err := app.CheckInPlace("pic.webp", pipeline.New(pipeline.Resolution{Percent: 50}))
+	if !errors.Is(err, app.ErrInPlaceUnsupportedExt) || !strings.Contains(err.Error(), "-o pic.png") {
+		t.Errorf("in place on a .webp: err = %v, want ErrInPlaceUnsupportedExt suggesting -o pic.png", err)
+	}
+}
+
+func TestMainSymbolsOfAnImageIgnoresTheTime(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe", "chafa")
+	in := testclip.MakeImage(t, "pic.png", 320, 240)
+
+	a, out, errOut := newApp()
+	if code := a.Main(context.Background(), []string{in, "--symbols", "7", "--symbols-width", "40"}); code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr %q)", code, errOut.String())
+	}
+	if lines := strings.Count(out.String(), "\n"); lines != 15 {
+		t.Errorf("printed %d lines, want 15", lines)
+	}
+}

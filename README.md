@@ -72,6 +72,17 @@ as plain text and runs nothing: braille dots dithered for shading, 100
 columns wide or `--symbols-width N`, as many rows as the frame needs. It
 needs `chafa` and takes no step flags or output flags.
 
+### Images
+
+`<input>` can also be a still image: PNG, JPEG, AVIF, WebP, HEIC, TIFF or
+BMP. The TUI then offers only the steps that apply to one (Resolution,
+with longest-side presets, File name and Raw args), the preview has no
+timeline to seek, play or trim, and step flags for time, audio or
+encoding are refused. The output keeps the input's format
+(`photo (edited).jpg`) when lazyff can write it (PNG, JPEG, AVIF, TIFF,
+BMP), else it is written as PNG; a File name ending in one of those
+extensions converts to that format (`--name photo.avif`).
+
 ### Output file rules
 
 Default output is `<name> (edited).<ext>` next to the input. `<ext>` is

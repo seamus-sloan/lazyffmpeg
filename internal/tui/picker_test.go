@@ -92,7 +92,7 @@ func TestPickerEmptyListing(t *testing.T) {
 	m = resized(m, 100, 30)
 
 	out := ansi.Strip(m.View().Content)
-	if !strings.Contains(out, "No video files in /dir") {
+	if !strings.Contains(out, "No video or image files in /dir") {
 		t.Errorf("missing empty message, got:\n%s", out)
 	}
 	if !strings.Contains(out, "backspace") {

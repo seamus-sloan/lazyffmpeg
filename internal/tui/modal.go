@@ -34,11 +34,28 @@ func isCustomOption(opts []modalOption, i int) bool {
 	return i >= 0 && i < len(opts) && opts[i].step == nil
 }
 
+// imageResolutionPresets are Resolution's presets for an image: a limit on
+// its longest side (a square box it is fitted inside, whichever way round
+// it is) or a percentage, rather than video's frame sizes.
+var imageResolutionPresets = []modalOption{
+	{"Longest side 2048", pipeline.Resolution{Width: 2048, Height: 2048}},
+	{"Longest side 1600", pipeline.Resolution{Width: 1600, Height: 1600}},
+	{"Longest side 1080", pipeline.Resolution{Width: 1080, Height: 1080}},
+	{"Longest side 800", pipeline.Resolution{Width: 800, Height: 800}},
+	{"50%", pipeline.Resolution{Percent: 50}},
+	{"25%", pipeline.Resolution{Percent: 25}},
+	{"Custom…", nil},
+}
+
 // presetsFor returns kind's preset options (Quality's presets depend on
-// codec, the pipeline's effective encoder).
-func presetsFor(kind pipeline.Kind, codec pipeline.Codec) []modalOption {
+// codec, the pipeline's effective encoder; Resolution's on whether the
+// input is an image).
+func presetsFor(kind pipeline.Kind, codec pipeline.Codec, image bool) []modalOption {
 	switch kind {
 	case pipeline.KindResolution:
+		if image {
+			return imageResolutionPresets
+		}
 		return []modalOption{
 			{"3840×2160", pipeline.Resolution{Width: 3840, Height: 2160}},
 			{"2560×1440", pipeline.Resolution{Width: 2560, Height: 1440}},
@@ -124,11 +141,14 @@ func placeholderFor(kind pipeline.Kind) string {
 
 // hintFor is a line shown under kind's Custom… text input, for a kind
 // whose input is prefilled (so its placeholder would never show).
-func hintFor(kind pipeline.Kind) string {
-	if kind == pipeline.KindFilename {
-		return "name (.mp4/.mov/.mkv/.webm/.m4v sets the container)"
+func hintFor(kind pipeline.Kind, image bool) string {
+	if kind != pipeline.KindFilename {
+		return ""
 	}
-	return ""
+	if image {
+		return "name (.png/.jpg/.avif/.tif/.bmp sets the format)"
+	}
+	return "name (.mp4/.mov/.mkv/.webm/.m4v sets the container)"
 }
 
 // customPrefill renders s back into the text a user would type to produce
@@ -254,7 +274,7 @@ func (m Model) openModal(kind pipeline.Kind) Model {
 		return m
 	}
 
-	opts := presetsFor(kind, codec)
+	opts := presetsFor(kind, codec, m.isImage())
 	ms := modalState{kind: kind, options: opts}
 
 	ti := textinput.New()
@@ -401,7 +421,7 @@ func (m Model) modalView() string {
 		b.WriteString(cursorPrefix(on) + label + "\n")
 		if o.step == nil {
 			b.WriteString("    " + ms.input.View() + "\n")
-			if hint := hintFor(ms.kind); hint != "" {
+			if hint := hintFor(ms.kind, m.isImage()); hint != "" {
 				b.WriteString("    " + dimStyle.Render(hint) + "\n")
 			}
 		}

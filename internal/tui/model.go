@@ -38,23 +38,54 @@ const (
 	focusPipeline
 )
 
+// menuSection is one headed group of MENU items.
+type menuSection struct {
+	heading string
+	kinds   []pipeline.Kind
+}
+
+// videoMenu and imageMenu list the step kinds MENU offers for a video
+// input and for an image input, in display order.
+var (
+	videoMenu = []menuSection{
+		{"Video", []pipeline.Kind{pipeline.KindResolution, pipeline.KindSpeed, pipeline.KindTrim, pipeline.KindFrameRate}},
+		{"Output", []pipeline.Kind{pipeline.KindEncoder, pipeline.KindQuality, pipeline.KindAudio,
+			pipeline.KindContainer, pipeline.KindFilename, pipeline.KindRawArgs}},
+	}
+	imageMenu = []menuSection{
+		{"Image", []pipeline.Kind{pipeline.KindResolution}},
+		{"Output", []pipeline.Kind{pipeline.KindFilename, pipeline.KindRawArgs}},
+	}
+)
+
+// isImage reports whether the session's input is a still image (see
+// probe.IsImage), which has no timeline: MENU offers only the steps that
+// apply to one, and the preview has no position to seek, play or trim.
+func (m Model) isImage() bool {
+	return probe.IsImage(m.session.Input)
+}
+
+func (m Model) menuSections() []menuSection {
+	if m.isImage() {
+		return imageMenu
+	}
+	return videoMenu
+}
+
 // menuKinds lists the step kinds shown in MENU, in display order. The last
 // selectable menu position (index len(menuKinds)) is the Run item.
-var menuKinds = []pipeline.Kind{
-	pipeline.KindResolution,
-	pipeline.KindSpeed,
-	pipeline.KindTrim,
-	pipeline.KindFrameRate,
-	pipeline.KindEncoder,
-	pipeline.KindQuality,
-	pipeline.KindAudio,
-	pipeline.KindContainer,
-	pipeline.KindFilename,
-	pipeline.KindRawArgs,
+func (m Model) menuKinds() []pipeline.Kind {
+	var kinds []pipeline.Kind
+	for _, s := range m.menuSections() {
+		kinds = append(kinds, s.kinds...)
+	}
+	return kinds
 }
 
 // menuRunIndex is the cursor position of the MENU's Run item.
-var menuRunIndex = len(menuKinds)
+func (m Model) menuRunIndex() int {
+	return len(m.menuKinds())
+}
 
 func menuItemLabel(k pipeline.Kind) string {
 	if k == pipeline.KindQuality {
@@ -277,6 +308,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	m.notice = ""
 
+	if m.isImage() && timelineKeys[key] {
+		return m, nil
+	}
+
 	switch key {
 	case "q", "ctrl+c":
 		m.quitting = true
@@ -322,10 +357,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.focus == focusMenu {
 		switch key {
 		case "enter":
-			if m.menuCursor == menuRunIndex {
+			if m.menuCursor == m.menuRunIndex() {
 				return m.tryRun()
 			}
-			m = m.openModal(menuKinds[m.menuCursor])
+			m = m.openModal(m.menuKinds()[m.menuCursor])
 			return m, nil
 		}
 	}
@@ -355,7 +390,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) moveCursor(delta int) Model {
 	if m.focus == focusMenu {
-		m.menuCursor = clamp(m.menuCursor+delta, 0, menuRunIndex)
+		m.menuCursor = clamp(m.menuCursor+delta, 0, m.menuRunIndex())
 		return m
 	}
 	n := m.pipeline.Len()

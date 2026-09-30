@@ -81,7 +81,7 @@ func TestMenuRunEntryCallsRunFuncExactlyOnce(t *testing.T) {
 	m := New(s, WithRunner(fake))
 	m = resized(m, 100, 30)
 	m.focus = focusMenu
-	m.menuCursor = menuRunIndex
+	m.menuCursor = m.menuRunIndex()
 
 	mm, cmd := m.Update(key("enter"))
 	m = mm.(Model)

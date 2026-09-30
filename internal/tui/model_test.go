@@ -305,8 +305,8 @@ func TestMenuCursorMovesAndClamps(t *testing.T) {
 		mm, _ = m.Update(key("j"))
 		m = mm.(Model)
 	}
-	if m.menuCursor != menuRunIndex {
-		t.Errorf("menuCursor = %d, want clamped to %d", m.menuCursor, menuRunIndex)
+	if m.menuCursor != m.menuRunIndex() {
+		t.Errorf("menuCursor = %d, want clamped to %d", m.menuCursor, m.menuRunIndex())
 	}
 }
 
