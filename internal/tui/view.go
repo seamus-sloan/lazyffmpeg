@@ -23,7 +23,7 @@ func (m Model) View() tea.View {
 	var v tea.View
 	v.AltScreen = true
 
-	if m.width < 80 || m.height < 24 {
+	if m.tooSmall() {
 		v.Content = fmt.Sprintf("Terminal too small: need 80×24, have %d×%d", m.width, m.height)
 		return v
 	}
@@ -44,6 +44,12 @@ func (m Model) View() tea.View {
 	}
 	v.Content = body
 	return v
+}
+
+// tooSmall reports whether the terminal is below the 80x24 the frame
+// needs; View then shows only a message saying so.
+func (m Model) tooSmall() bool {
+	return m.width < 80 || m.height < 24
 }
 
 func (m Model) frameTitle() string {

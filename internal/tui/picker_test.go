@@ -29,6 +29,19 @@ func pickerSession() app.Session {
 	return app.Session{Dir: "/dir"}
 }
 
+// initListing runs m's Init commands and returns the directory listing
+// among their messages.
+func initListing(t *testing.T, m Model) pickerListedMsg {
+	t.Helper()
+	for _, msg := range cmdMsgs(m.Init()) {
+		if listed, ok := msg.(pickerListedMsg); ok {
+			return listed
+		}
+	}
+	t.Fatal("Init() produced no pickerListedMsg in picker mode")
+	return pickerListedMsg{}
+}
+
 func TestNewStartsInPickerModeWhenInputEmpty(t *testing.T) {
 	var gotDir string
 	m := New(pickerSession(), WithLister(func(dir string) ([]picker.Entry, error) {
@@ -39,17 +52,9 @@ func TestNewStartsInPickerModeWhenInputEmpty(t *testing.T) {
 		t.Fatalf("mode = %v, want modePicker", m.mode)
 	}
 
-	cmd := m.Init()
-	if cmd == nil {
-		t.Fatal("Init() returned no command in picker mode")
-	}
-	msg := cmd()
+	listed := initListing(t, m)
 	if gotDir != "/dir" {
 		t.Errorf("listFn called with dir %q, want /dir", gotDir)
-	}
-	listed, ok := msg.(pickerListedMsg)
-	if !ok {
-		t.Fatalf("Init() cmd produced %T, want pickerListedMsg", msg)
 	}
 	if len(listed.entries) != 3 {
 		t.Errorf("listed %d entries, want 3", len(listed.entries))
@@ -61,9 +66,8 @@ func TestPickerViewListsEntriesAndCount(t *testing.T) {
 		return fakeEntries(), nil
 	}))
 	m = resized(m, 100, 30)
-	mm, cmd := m.Update(m.Init()())
+	mm, _ := m.Update(initListing(t, m))
 	m = mm.(Model)
-	_ = cmd
 
 	out := ansi.Strip(m.View().Content)
 	if !strings.Contains(out, "lazyff · /dir") {
