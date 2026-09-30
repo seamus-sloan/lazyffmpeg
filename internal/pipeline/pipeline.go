@@ -2,7 +2,7 @@ package pipeline
 
 // outputOrder is the canonical order in which output steps are listed,
 // independent of the order they were upserted.
-var outputOrder = []Kind{KindEncoder, KindQuality, KindAudio, KindContainer, KindFilename, KindRawArgs}
+var outputOrder = []Kind{KindEncoder, KindQuality, KindAudio, KindContainer, KindConvert, KindFilename, KindRawArgs}
 
 // Pipeline is an immutable ordered set of filter steps plus a set of output
 // settings. Every method returns a new value; the receiver is untouched,
@@ -23,7 +23,7 @@ func New(steps ...Step) Pipeline {
 
 // Steps returns the filter steps in their current order, followed by the
 // output steps in canonical order (Encoder, Quality, Audio, Container,
-// Filename, RawArgs). The returned slice is a copy.
+// Convert, Filename, RawArgs). The returned slice is a copy.
 func (p Pipeline) Steps() []Step {
 	result := make([]Step, 0, len(p.filters)+len(p.outputs))
 	result = append(result, p.filters...)

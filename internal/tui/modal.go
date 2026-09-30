@@ -92,6 +92,17 @@ func presetsFor(kind pipeline.Kind, codec pipeline.Codec, image bool) []modalOpt
 			{"Flip vertical", pipeline.Rotate{Flip: pipeline.FlipVertical}},
 			{"Custom…", nil},
 		}
+	case pipeline.KindConvert:
+		return []modalOption{
+			{"PNG", pipeline.Convert{Format: pipeline.ImagePNG}},
+			{"JPEG 90%", pipeline.Convert{Format: pipeline.ImageJPEG, Quality: 90}},
+			{"JPEG 75%", pipeline.Convert{Format: pipeline.ImageJPEG, Quality: 75}},
+			{"AVIF 80%", pipeline.Convert{Format: pipeline.ImageAVIF, Quality: 80}},
+			{"AVIF 50%", pipeline.Convert{Format: pipeline.ImageAVIF, Quality: 50}},
+			{"TIFF", pipeline.Convert{Format: pipeline.ImageTIFF}},
+			{"BMP", pipeline.Convert{Format: pipeline.ImageBMP}},
+			{"Custom…", nil},
+		}
 	case pipeline.KindTrim:
 		return []modalOption{{"Custom…", nil}}
 	case pipeline.KindFrameRate:
@@ -157,6 +168,8 @@ func placeholderFor(kind pipeline.Kind) string {
 		return "16:9, 800x600 (centered), 800x600+X+Y"
 	case pipeline.KindRotate:
 		return "90, 180, 270, h, v, or e.g. 90 h"
+	case pipeline.KindConvert:
+		return "png, jpeg 85, avif 60, tiff, bmp"
 	}
 	return ""
 }
@@ -201,6 +214,11 @@ func customPrefill(s pipeline.Step) string {
 			return fmt.Sprintf("%dx%d+%d+%d", v.Width, v.Height, v.X, v.Y)
 		}
 		return fmt.Sprintf("%dx%d", v.Width, v.Height)
+	case pipeline.Convert:
+		if v.Quality > 0 {
+			return fmt.Sprintf("%s %d", v.Format, v.Quality)
+		}
+		return string(v.Format)
 	case pipeline.Rotate:
 		return strings.TrimSpace(strings.TrimPrefix(fmt.Sprintf("%d %s", v.Degrees, v.Flip), "0 "))
 	case pipeline.Speed:
@@ -255,6 +273,12 @@ func parseCustom(kind pipeline.Kind, text string) (pipeline.Step, error) {
 		return v, nil
 	case pipeline.KindRotate:
 		v, err := pipeline.ParseRotate(text)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	case pipeline.KindConvert:
+		v, err := pipeline.ParseConvert(text)
 		if err != nil {
 			return nil, err
 		}

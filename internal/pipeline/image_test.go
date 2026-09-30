@@ -100,3 +100,95 @@ func TestEstimateHasNoneForAnImage(t *testing.T) {
 		t.Errorf("err = %v, want ErrNoImageEstimate", err)
 	}
 }
+
+func TestParseConvert(t *testing.T) {
+	tests := map[string]Convert{
+		"png":      {Format: ImagePNG},
+		"JPG":      {Format: ImageJPEG},
+		"jpeg 85":  {Format: ImageJPEG, Quality: 85},
+		"avif 60%": {Format: ImageAVIF, Quality: 60},
+		"tif":      {Format: ImageTIFF},
+		"bmp":      {Format: ImageBMP},
+	}
+	for in, want := range tests {
+		got, err := ParseConvert(in)
+		if err != nil || got != want {
+			t.Errorf("ParseConvert(%q) = %+v, %v; want %+v", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "webp", "gif", "jpeg 0", "jpeg 101", "jpeg best", "png 80", "jpeg 80 90"} {
+		if _, err := ParseConvert(in); !errors.Is(err, ErrInvalidStep) {
+			t.Errorf("ParseConvert(%q): err = %v, want ErrInvalidStep", in, err)
+		}
+	}
+}
+
+func TestConvertSetsTheFormatAndQuality(t *testing.T) {
+	tests := []struct {
+		c          Convert
+		out, codec string
+	}{
+		{Convert{Format: ImageJPEG}, "in (edited).jpg", "-c:v mjpeg -q:v 2"},
+		{Convert{Format: ImageJPEG, Quality: 100}, "in (edited).jpg", "-c:v mjpeg -q:v 2"},
+		{Convert{Format: ImageJPEG, Quality: 85}, "in (edited).jpg", "-c:v mjpeg -q:v 6"},
+		{Convert{Format: ImageJPEG, Quality: 1}, "in (edited).jpg", "-c:v mjpeg -q:v 31"},
+		{Convert{Format: ImageAVIF}, "in (edited).avif", "-c:v libsvtav1 -crf 30 -pix_fmt yuv420p"},
+		{Convert{Format: ImageAVIF, Quality: 60}, "in (edited).avif", "-c:v libsvtav1 -crf 25 -pix_fmt yuv420p"},
+		{Convert{Format: ImageTIFF}, "in (edited).tif", "-c:v tiff"},
+	}
+	for _, tt := range tests {
+		p := New(tt.c)
+		out := OutputPath("in.png", "", p)
+		if out != tt.out {
+			t.Errorf("%s: output = %q, want %q", tt.c.Summary(), out, tt.out)
+		}
+		argv, err := Compile(infoImage(), p, Options{Input: "in.png", Output: out})
+		if err != nil {
+			t.Fatalf("%s: Compile: %v", tt.c.Summary(), err)
+		}
+		if got := QuoteCommand(argv); !strings.Contains(got, " "+tt.codec+" ") {
+			t.Errorf("%s: argv %s, want %s", tt.c.Summary(), got, tt.codec)
+		}
+	}
+}
+
+func TestConvertMustAgreeWithTheOutputsName(t *testing.T) {
+	jpeg := Convert{Format: ImageJPEG}
+	_, err := Compile(infoImage(), New(jpeg), Options{Input: "in.png", Output: "out.png"})
+	if !errors.Is(err, ErrConvertMismatch) || err.Error() != "output does not match the Convert format: out.png is PNG, Convert writes JPEG" {
+		t.Errorf("-o out.png with Convert JPEG: err = %v", err)
+	}
+	p := New(jpeg, Filename{Name: "demo.avif"})
+	_, err = Compile(infoImage(), p, Options{Input: "in.png", Output: OutputPath("in.png", "", p)})
+	if !errors.Is(err, ErrConvertMismatch) {
+		t.Errorf("File name demo.avif with Convert JPEG: err = %v, want ErrConvertMismatch", err)
+	}
+	p = New(jpeg, Filename{Name: "demo"})
+	if got := OutputPath("in.png", "", p); got != "demo.jpg" {
+		t.Errorf("a bare File name with Convert JPEG writes %q, want demo.jpg", got)
+	}
+}
+
+func TestConvertIsListedAmongTheOutputSteps(t *testing.T) {
+	p := New(RawArgs{Text: "-y", Args: []string{"-y"}}, Convert{Format: ImagePNG}, Filename{Name: "x"}, Crop{AspectW: 1, AspectH: 1})
+	var kinds []Kind
+	for _, s := range p.Steps() {
+		kinds = append(kinds, s.Kind())
+	}
+	want := []Kind{KindCrop, KindConvert, KindFilename, KindRawArgs}
+	if len(kinds) != len(want) || p.Len() != len(want) {
+		t.Fatalf("Steps kinds = %v (Len %d), want %v", kinds, p.Len(), want)
+	}
+	for i := range want {
+		if kinds[i] != want[i] {
+			t.Fatalf("Steps kinds = %v, want %v", kinds, want)
+		}
+	}
+}
+
+func TestConvertIsOnlyForImages(t *testing.T) {
+	_, err := Compile(infoNoAudio(10), New(Convert{Format: ImagePNG}), Options{Input: "in.mp4", Output: "out.mp4"})
+	if !errors.Is(err, ErrConvertVideo) {
+		t.Errorf("err = %v, want ErrConvertVideo", err)
+	}
+}

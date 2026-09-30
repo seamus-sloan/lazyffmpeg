@@ -64,6 +64,8 @@ and moves straight to the editor, keeping any step flags and `-o`/
 | `--target-size SIZE` | e.g. `20MB` | target output size (single-pass ABR) |
 | `--audio MODE` | `keep remove aac[:BITRATE]` | audio handling |
 | `--container FMT` | `mp4 mov mkv webm` | output container |
+| `--format FMT` | `png jpeg avif tiff bmp` | image output format (images only) |
+| `--quality N` | `1`–`100` | JPEG or AVIF quality, with `--format` (images only) |
 | `--name NAME` | file name | output file name, next to the input (see [Output file rules](#output-file-rules)) |
 | `--args "..."` | raw args | extra ffmpeg arguments, inserted before the output path |
 
@@ -78,13 +80,19 @@ needs `chafa` and takes no step flags or output flags.
 ### Images
 
 `<input>` can also be a still image: PNG, JPEG, AVIF, WebP, HEIC, TIFF or
-BMP. The TUI then offers only the steps that apply to one (Resolution,
-with longest-side presets, Crop, Rotate / flip, File name and Raw args),
-the preview has no timeline to seek, play or trim, and step flags for
-time, audio or encoding are refused. The output keeps the input's format
-(`photo (edited).jpg`) when lazyff can write it (PNG, JPEG, AVIF, TIFF,
-BMP), else it is written as PNG; a File name ending in one of those
-extensions converts to that format (`--name photo.avif`).
+BMP. The TUI then offers only the steps that apply to one: Resolution
+(with longest-side presets), Crop, Rotate / flip, Convert, File name and
+Raw args. The preview has no timeline to seek, play or trim, and step
+flags for time, audio or encoding are refused.
+
+Convert (`--format`, `--quality`) writes PNG, JPEG, AVIF, TIFF or BMP,
+with a 1–100 quality for JPEG and AVIF (JPEG defaults to near-best, AVIF
+to CRF 30). WebP and HEIC can be read but not written: Homebrew's ffmpeg
+has no encoder for them. Without Convert the output keeps the input's
+format (`photo (edited).jpg`) when lazyff can write it, else it is PNG;
+a File name ending in `.png`, `.jpg`, `.avif`, `.tif` or `.bmp` also
+picks the format, and must agree with a Convert step. `--in-place`
+cannot convert, only rewrite the image in its own format.
 
 ### Output file rules
 

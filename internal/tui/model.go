@@ -55,7 +55,7 @@ var (
 	}
 	imageMenu = []menuSection{
 		{"Image", []pipeline.Kind{pipeline.KindResolution, pipeline.KindCrop, pipeline.KindRotate}},
-		{"Output", []pipeline.Kind{pipeline.KindFilename, pipeline.KindRawArgs}},
+		{"Output", []pipeline.Kind{pipeline.KindConvert, pipeline.KindFilename, pipeline.KindRawArgs}},
 	}
 )
 
@@ -89,8 +89,11 @@ func (m Model) menuRunIndex() int {
 }
 
 func menuItemLabel(k pipeline.Kind) string {
-	if k == pipeline.KindQuality {
+	switch k {
+	case pipeline.KindQuality:
 		return "Quality / target size"
+	case pipeline.KindRotate:
+		return "Rotate / flip"
 	}
 	return k.Label()
 }

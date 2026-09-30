@@ -67,6 +67,9 @@ Step flags (applied to the pipeline in the order given):
   --target-size SIZE      target output size, e.g. 20MB
   --audio MODE            keep, remove, aac[:BITRATE]
   --container FMT         mp4, mov, mkv, webm
+  --format FMT            image output format: png, jpeg, avif, tiff, bmp
+  --quality N             image quality 1-100 for jpeg or avif (needs
+                          --format)
   --name NAME             output file name, next to the input; a
                           .mp4/.mov/.mkv/.webm/.m4v ending sets the
                           container, else the default one is appended
@@ -92,6 +95,7 @@ var valueFlagNames = map[string]bool{
 	"--name": true, "--args": true, "-o": true,
 	"--symbols": true, "--symbols-width": true,
 	"--crop": true, "--rotate": true, "--flip": true,
+	"--format": true, "--quality": true,
 }
 
 var boolFlagNames = map[string]bool{
@@ -120,6 +124,9 @@ type parser struct {
 
 	rot    pipeline.Rotate
 	hasRot bool
+
+	conv    pipeline.Convert
+	hasConv bool
 
 	stretchSeen bool
 }
@@ -208,6 +215,14 @@ func Parse(args []string) (Config, error) {
 	if pr.hasRot {
 		if err := pr.rot.Validate(); err != nil {
 			return Config{}, usageErr("invalid rotation: %v", err)
+		}
+	}
+	if pr.hasConv {
+		if pr.conv.Format == "" {
+			return Config{}, usageErr("--quality needs --format")
+		}
+		if err := pr.conv.Validate(); err != nil {
+			return Config{}, usageErr("invalid --format/--quality: %v", err)
 		}
 	}
 
@@ -349,6 +364,22 @@ func (pr *parser) applyValue(name, val string) error {
 		}
 		pr.commitRotate()
 
+	case "--format":
+		f := pipeline.ImageFormatOf("." + val)
+		if f == "" {
+			return usageErr("invalid value for --format: %q (png, jpeg, avif, tiff or bmp)", val)
+		}
+		pr.conv.Format = f
+		pr.commitConvert()
+
+	case "--quality":
+		q, err := strconv.Atoi(strings.TrimSuffix(val, "%"))
+		if err != nil || q < 1 || q > 100 {
+			return usageErr("invalid value for --quality: %q (1-100)", val)
+		}
+		pr.conv.Quality = q
+		pr.commitConvert()
+
 	case "--speed":
 		sp, err := pipeline.ParseSpeed(val)
 		if err != nil {
@@ -485,6 +516,15 @@ func (pr *parser) commitResolution() error {
 func (pr *parser) commitRotate() {
 	pr.hasRot = true
 	pr.pl = pr.pl.Upsert(pr.rot)
+	pr.cfg.HasSteps = true
+}
+
+// commitConvert records the merged --format/--quality values at the
+// position of the first of those flags, validated once the whole command
+// line is read (see Parse).
+func (pr *parser) commitConvert() {
+	pr.hasConv = true
+	pr.pl = pr.pl.Upsert(pr.conv)
 	pr.cfg.HasSteps = true
 }
 

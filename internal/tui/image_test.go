@@ -23,7 +23,7 @@ func TestImageMenuOffersOnlyImageSteps(t *testing.T) {
 	m := resized(New(imageSession(pipeline.New())), 100, 30)
 
 	want := []pipeline.Kind{pipeline.KindResolution, pipeline.KindCrop, pipeline.KindRotate,
-		pipeline.KindFilename, pipeline.KindRawArgs}
+		pipeline.KindConvert, pipeline.KindFilename, pipeline.KindRawArgs}
 	got := m.menuKinds()
 	if len(got) != len(want) {
 		t.Fatalf("menuKinds = %v, want %v", got, want)
@@ -34,7 +34,7 @@ func TestImageMenuOffersOnlyImageSteps(t *testing.T) {
 		}
 	}
 	out := viewText(m)
-	for _, s := range []string{"Image", "Resolution", "Crop", "Rotate / flip", "File name", "Raw args", "Run"} {
+	for _, s := range []string{"Image", "Resolution", "Crop", "Rotate / flip", "Convert", "File name", "Raw args", "Run"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("MENU is missing %q, got:\n%s", s, out)
 		}
@@ -117,6 +117,8 @@ func TestCropAndRotateCustomTextRoundTrips(t *testing.T) {
 		pipeline.Rotate{Degrees: 90},
 		pipeline.Rotate{Flip: pipeline.FlipHorizontal},
 		pipeline.Rotate{Degrees: 270, Flip: pipeline.FlipVertical},
+		pipeline.Convert{Format: pipeline.ImagePNG},
+		pipeline.Convert{Format: pipeline.ImageJPEG, Quality: 85},
 	} {
 		text := customPrefill(s)
 		got, err := parseCustom(s.Kind(), text)
@@ -141,6 +143,33 @@ func TestCropAndRotatePresetsAddSteps(t *testing.T) {
 			if got, ok := m.pipeline.Find(tt.kind); !ok || got != tt.want {
 				t.Errorf("%s on %s: first preset added %v, want %+v", tt.kind.Label(), session.Input, got, tt.want)
 			}
+		}
+	}
+}
+
+func TestConvertChangesTheImagesOutput(t *testing.T) {
+	m := resized(New(imageSession(pipeline.New())), 100, 30)
+	m = openMenu(t, m, pipeline.KindConvert)
+	for m.modal.options[m.modal.cursor].label != "AVIF 80%" {
+		m = step(t, m, key("down"))
+	}
+	m = step(t, m, key("enter"))
+
+	if got, _ := m.pipeline.Find(pipeline.KindConvert); got != (pipeline.Convert{Format: pipeline.ImageAVIF, Quality: 80}) {
+		t.Fatalf("pipeline has %v, want AVIF 80%%", got)
+	}
+	out := viewText(m)
+	if !strings.Contains(out, "→ photo (edited).avif") || !strings.Contains(out, "-crf 13") {
+		t.Errorf("footer should write an AVIF at CRF 13, got:\n%s", out)
+	}
+}
+
+func TestPipelineSetsEverySummaryApartFromItsLabel(t *testing.T) {
+	m := resized(New(imageSession(pipeline.New(pipeline.Rotate{Degrees: 90}, pipeline.Convert{Format: pipeline.ImagePNG}))), 100, 30)
+	out := viewText(m)
+	for _, want := range []string{"Rotate/flip  90° clockwise", "Convert      PNG"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("PIPELINE is missing %q, got:\n%s", want, out)
 		}
 	}
 }

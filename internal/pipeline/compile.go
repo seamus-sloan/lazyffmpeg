@@ -60,6 +60,9 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 			return nil, err
 		}
 	}
+	if _, ok := p.Find(KindConvert); ok {
+		return nil, ErrConvertVideo
+	}
 	if err := checkFilename(p, opt.Input); err != nil {
 		return nil, err
 	}
@@ -181,6 +184,10 @@ func checkFilename(p Pipeline, input string) error {
 		return nil
 	}
 	if image {
+		if c, ok := p.Find(KindConvert); ok && c.(Convert).Format != ImageFormatOf(name) {
+			return fmt.Errorf("%w: %s is %s, Convert writes %s", ErrConvertMismatch,
+				name, ImageFormatOf(name).Label(), c.(Convert).Format.Label())
+		}
 		return nil
 	}
 	if c, ok := p.Find(KindContainer); ok && c.(Container).Format != named {

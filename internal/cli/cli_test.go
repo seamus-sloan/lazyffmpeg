@@ -582,3 +582,24 @@ func TestParseCropRotateFlipUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestParseFormatAndQuality(t *testing.T) {
+	cfg, err := Parse([]string{"in.png", "--quality", "85", "--width", "800", "--format", "jpg"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	steps := cfg.Pipeline.Steps()
+	if len(steps) != 2 || steps[1] != (pipeline.Convert{Format: pipeline.ImageJPEG, Quality: 85}) {
+		t.Errorf("steps = %v, want the resolution, then JPEG 85%%", steps)
+	}
+	for name, args := range map[string][]string{
+		"quality without format": {"in.png", "--quality", "80"},
+		"unknown format":         {"in.png", "--format", "webp"},
+		"quality out of range":   {"in.png", "--format", "jpeg", "--quality", "0"},
+		"quality for png":        {"in.png", "--format", "png", "--quality", "80"},
+	} {
+		if _, err := Parse(args); !errors.Is(err, ErrUsage) {
+			t.Errorf("%s: err = %v, want ErrUsage", name, err)
+		}
+	}
+}

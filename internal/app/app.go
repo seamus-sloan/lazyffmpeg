@@ -48,6 +48,9 @@ var (
 	// input whose format lazyff cannot write back: an extension it does
 	// not write at all, or an .m4v input with an encoder .m4v cannot hold.
 	ErrInPlaceUnsupportedExt = errors.New("in-place cannot write this format")
+	// ErrInPlaceFormatMismatch is returned when --in-place is combined with
+	// a Convert step to a different format than the input image's own.
+	ErrInPlaceFormatMismatch = errors.New("in-place cannot change the image format")
 	// ErrInPlaceRename is returned when --in-place is combined with a File
 	// name step: renaming in place would delete the original.
 	ErrInPlaceRename = errors.New("in-place cannot rename the file (that would delete the original)")
@@ -69,10 +72,14 @@ func CheckInPlace(input string, p pipeline.Pipeline) error {
 		return ErrInPlaceRename
 	}
 	if probe.IsImage(input) {
-		if pipeline.ImageFormatOf(input) == "" {
+		own := pipeline.ImageFormatOf(input)
+		if own == "" {
 			suggestion := pipeline.QuoteCommand([]string{strings.TrimSuffix(input, filepath.Ext(input)) + ".png"})
 			return fmt.Errorf("%w (%s); write a new file with -o %s instead", ErrInPlaceUnsupportedExt,
 				strings.ToLower(filepath.Ext(input)), suggestion)
+		}
+		if c, ok := p.Find(pipeline.KindConvert); ok && c.(pipeline.Convert).Format != own {
+			return fmt.Errorf("%w (input is %s)", ErrInPlaceFormatMismatch, own.Label())
 		}
 		return nil
 	}

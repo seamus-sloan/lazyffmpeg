@@ -33,8 +33,8 @@ func CanKeepExt(ext string, p Pipeline) bool {
 // DefaultOutputPath returns "<dir>/<stem> (edited).<ext>" for input, where
 // <ext> is the container step's extension when p has one, else the input's
 // own extension when CanKeepExt allows it, else ".mp4". For an image input
-// it is the input's own extension when lazyff writes that format, else
-// ".png".
+// it is a Convert step's format's extension, else the input's own when
+// lazyff writes that format, else ".png".
 func DefaultOutputPath(input string, p Pipeline) string {
 	base := filepath.Base(input)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
@@ -83,7 +83,7 @@ func namedFile(name, input string, p Pipeline) string {
 // ".mp4"; for an image input, defaultImageExt's.
 func defaultExt(input string, p Pipeline) string {
 	if probe.IsImage(input) {
-		return defaultImageExt(input)
+		return defaultImageExt(input, p)
 	}
 	if c, ok := p.Find(KindContainer); ok {
 		return "." + string(c.(Container).Format)

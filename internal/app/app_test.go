@@ -977,3 +977,40 @@ func TestMainHeadlessRefusesACropOutsideTheFrame(t *testing.T) {
 		t.Errorf("stderr = %q", errOut.String())
 	}
 }
+
+func TestMainHeadlessConvertsAnImage(t *testing.T) {
+	in := testclip.MakeImage(t, "pic.png", 320, 240)
+	small, big := filepath.Join(filepath.Dir(in), "small.jpg"), filepath.Join(filepath.Dir(in), "big.jpg")
+	for _, run := range []struct {
+		out, quality string
+	}{{small, "20"}, {big, "95"}} {
+		a, _, errOut := newApp()
+		args := []string{in, "--format", "jpeg", "--quality", run.quality, "-o", run.out}
+		if code := a.Main(context.Background(), args); code != 0 {
+			t.Fatalf("exit code = %d, want 0 (stderr %q)", code, errOut.String())
+		}
+	}
+	s, _ := os.Stat(small)
+	b, _ := os.Stat(big)
+	if s == nil || b == nil || s.Size() >= b.Size() {
+		t.Errorf("quality 20 wrote %v bytes, quality 95 %v; want the lower quality smaller", s, b)
+	}
+
+	a, out, errOut := newApp()
+	if code := a.Main(context.Background(), []string{in, "--format", "avif", "--quality", "50"}); code != 0 {
+		t.Fatalf("avif: exit code = %d, want 0 (stderr %q)", code, errOut.String())
+	}
+	if want := filepath.Join(filepath.Dir(in), "pic (edited).avif"); !strings.Contains(out.String(), want) {
+		t.Errorf("stdout = %q, want it to name %s", out.String(), want)
+	}
+}
+
+func TestCheckInPlaceRefusesConvertingTheImage(t *testing.T) {
+	err := app.CheckInPlace("pic.jpg", pipeline.New(pipeline.Convert{Format: pipeline.ImagePNG}))
+	if !errors.Is(err, app.ErrInPlaceFormatMismatch) {
+		t.Errorf("err = %v, want ErrInPlaceFormatMismatch", err)
+	}
+	if err := app.CheckInPlace("pic.jpg", pipeline.New(pipeline.Convert{Format: pipeline.ImageJPEG, Quality: 70})); err != nil {
+		t.Errorf("recompressing a .jpg in place: err = %v, want nil", err)
+	}
+}

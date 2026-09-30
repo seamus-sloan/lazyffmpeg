@@ -31,6 +31,7 @@ const (
 	KindRawArgs
 	KindCrop
 	KindRotate
+	KindConvert
 )
 
 // IsFilter reports whether k is one of the ordered filter steps.
@@ -78,7 +79,9 @@ func (k Kind) Label() string {
 	case KindCrop:
 		return "Crop"
 	case KindRotate:
-		return "Rotate / flip"
+		return "Rotate/flip"
+	case KindConvert:
+		return "Convert"
 	}
 	return ""
 }
