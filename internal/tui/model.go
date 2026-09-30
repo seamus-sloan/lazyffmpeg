@@ -5,10 +5,13 @@ package tui
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/app"
 	"github.com/seamus-sloan/lazyffmpeg/internal/picker"
@@ -72,6 +75,13 @@ type Model struct {
 	renderFn          RenderFunc
 	rendererAvailable bool
 	colorProfile      string
+
+	// graphics is set once the terminal answers graphicsProbe: preview
+	// frames are then kitty images rather than chafa symbols.
+	// windowPixelWidth x windowPixelHeight is the terminal's reported
+	// window size in pixels, 0 = unknown.
+	graphics                            bool
+	windowPixelWidth, windowPixelHeight int
 
 	session  app.Session
 	pipeline pipeline.Pipeline
@@ -140,13 +150,15 @@ func New(s app.Session, opts ...Option) Model {
 	return m
 }
 
-// Init starts the program: in picker mode it kicks off the initial
-// directory listing.
+// Init starts the program: it asks the terminal whether it can show
+// kitty graphics and, in picker mode, kicks off the initial directory
+// listing.
 func (m Model) Init() tea.Cmd {
+	probe := tea.Raw(graphicsProbe)
 	if m.mode == modePicker {
-		return m.listCmd()
+		return tea.Batch(probe, m.listCmd())
 	}
-	return nil
+	return probe
 }
 
 // Pipeline returns the model's current pipeline value.
@@ -158,7 +170,8 @@ func (m Model) Pipeline() pipeline.Pipeline {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	nm, renderCmd := next.(Model).rerenderIfBoxResized()
-	return nm, tea.Batch(cmd, renderCmd)
+	nm, imageCmd := nm.syncImage()
+	return nm, tea.Batch(cmd, renderCmd, imageCmd)
 }
 
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -166,6 +179,32 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		var query tea.Cmd
+		if m.graphics {
+			// The window's size in pixels changed with it.
+			query = tea.Raw(ansi.WindowOp(14))
+		}
+		if m.mode == modeMain {
+			mm, cmd := m.requestRender()
+			return mm, tea.Batch(cmd, query)
+		}
+		return m, query
+
+	case uv.PixelSizeEvent:
+		if msg.Width == m.windowPixelWidth && msg.Height == m.windowPixelHeight {
+			return m, nil
+		}
+		m.windowPixelWidth, m.windowPixelHeight = msg.Width, msg.Height
+		if m.graphics && m.mode == modeMain {
+			return m.requestRender()
+		}
+		return m, nil
+
+	case uv.KittyGraphicsEvent:
+		if msg.Options.ID != graphicsProbeID || string(msg.Payload) != "OK" || m.graphics {
+			return m, nil
+		}
+		m.graphics = true
 		if m.mode == modeMain {
 			return m.requestRender()
 		}
@@ -406,7 +445,12 @@ func Run(ctx context.Context, s app.Session) error {
 	m := New(s, withRunWaitGroup(&wg))
 	m.ctx = ctx
 	p := tea.NewProgram(m, tea.WithContext(ctx))
-	_, err := p.Run()
+	final, err := p.Run()
+	if fm, ok := final.(Model); ok && fm.graphics {
+		// Leaving the alternate screen need not remove the images drawn
+		// on it.
+		_, _ = os.Stdout.WriteString(preview.DeleteKittyImage(imageIDs[0]) + preview.DeleteKittyImage(imageIDs[1]))
+	}
 	waitForRuns(&wg, runWaitTimeout)
 	return err
 }

@@ -14,8 +14,10 @@ go install github.com/seamus-sloan/lazyffmpeg/cmd/lazyff@latest
 brew install ffmpeg chafa
 ```
 
-`ffmpeg`/`ffprobe` are required; `chafa` is only needed for the terminal
-preview (everything else still works without it).
+`ffmpeg`/`ffprobe` are required. In a terminal that supports the kitty
+graphics protocol (kitty, Ghostty, WezTerm, Warp, …) the preview shows the
+frame at full resolution; elsewhere it is drawn as text by `chafa`, which
+is only needed for that preview (everything else still works without it).
 
 ## Usage
 

@@ -2,11 +2,13 @@ package tui
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
 	"github.com/seamus-sloan/lazyffmpeg/internal/preview"
@@ -37,6 +39,15 @@ type previewState struct {
 	frame    string
 	frameErr string
 
+	// image is the latest kitty graphics render (see preview.Request's
+	// ImageID): the sequence that draws it, the id it is transmitted
+	// under and the box size, in cells, it was rendered for. drawnID is
+	// the id of the image on screen now, 0 = none (see syncImage).
+	image                string
+	imageID              int
+	imageCols, imageRows int
+	drawnID              int
+
 	nextSeq    int // monotonically increasing request counter
 	pendingSeq int // seq of the outstanding render; 0 = none in flight
 	dirty      bool
@@ -48,12 +59,35 @@ type previewState struct {
 
 // previewFrameMsg carries one render's outcome, tagged with the request's
 // sequence number so a reply that lands after a newer request was issued
-// can be dropped as stale.
+// can be dropped as stale, and with the request itself.
 type previewFrameMsg struct {
 	seq  int
+	req  preview.Request
 	text string
 	err  error
 }
+
+// imageIDs are the two kitty image ids preview frames alternate between,
+// so each new frame is drawn before the one it replaces is deleted
+// (without a blank gap between them). They are unusual enough ("lf" in
+// the high bytes) not to collide with images other programs leave on the
+// screen, since Run deletes both on exit.
+var imageIDs = [2]int{0x6c660001, 0x6c660002}
+
+// graphicsProbeID is the image id of the kitty graphics query sent at
+// startup; a terminal that supports the protocol answers it with "OK".
+const graphicsProbeID = 0x6c660000
+
+// graphicsProbe asks the terminal whether it supports kitty graphics (a
+// query for a 1x1 image that is never stored or shown) and for its window
+// size in pixels, which previewPixelSize divides between cells.
+var graphicsProbe = ansi.KittyGraphics([]byte("AAAA"),
+	"i="+strconv.Itoa(graphicsProbeID), "s=1", "v=1", "a=q", "t=d", "f=24") +
+	ansi.WindowOp(14)
+
+// fallbackCellWidth x fallbackCellHeight is the cell size, in pixels,
+// assumed when the terminal never reported its window size in pixels.
+const fallbackCellWidth, fallbackCellHeight = 8, 16
 
 // previewTickMsg advances playback by one frame interval. gen ties it to
 // the play session that scheduled it (see previewState.playGen).
@@ -81,7 +115,7 @@ func (m Model) previewRequest() preview.Request {
 		filter = pipeline.SpatialVideoFilter(m.pipeline)
 	}
 	lo, hi := m.previewRange()
-	return preview.Request{
+	req := preview.Request{
 		Input:  m.session.Input,
 		Time:   clampRenderTime(m.preview.time, lo, hi, m.session.Info.Video.FPS),
 		Filter: filter,
@@ -89,6 +123,24 @@ func (m Model) previewRequest() preview.Request {
 		Rows:   rows,
 		Colors: m.colorProfile,
 	}
+	if m.graphics {
+		req.ImageID = imageIDs[0]
+		if m.preview.imageID == imageIDs[0] {
+			req.ImageID = imageIDs[1]
+		}
+		req.PixelWidth, req.PixelHeight = m.previewPixelSize(cols, rows)
+	}
+	return req
+}
+
+// previewPixelSize returns the size, in pixels, of a cols x rows box: the
+// terminal's window size in pixels divided evenly between its cells, or
+// fallbackCellWidth x fallbackCellHeight cells when it never reported one.
+func (m Model) previewPixelSize(cols, rows int) (w, h int) {
+	if m.windowPixelWidth <= 0 || m.windowPixelHeight <= 0 || m.width <= 0 || m.height <= 0 {
+		return cols * fallbackCellWidth, rows * fallbackCellHeight
+	}
+	return cols * m.windowPixelWidth / m.width, rows * m.windowPixelHeight / m.height
 }
 
 // clampRenderTime clamps t into [lo,hi], except its effective upper bound
@@ -113,7 +165,7 @@ func clampRenderTime(t, lo, hi, fps float64) float64 {
 // render (at whatever the state is by then) follows once the in-flight one
 // lands.
 func (m Model) requestRender() (Model, tea.Cmd) {
-	if !m.rendererAvailable || m.session.Input == "" {
+	if !m.canRender() || m.session.Input == "" {
 		return m, nil
 	}
 	if m.preview.pendingSeq != 0 {
@@ -147,12 +199,18 @@ func (m Model) rerenderIfBoxResized() (Model, tea.Cmd) {
 	return m.requestRender()
 }
 
+// canRender reports whether preview frames can be rendered at all: as
+// kitty images, which need only ffmpeg, or as chafa symbols.
+func (m Model) canRender() bool {
+	return m.graphics || m.rendererAvailable
+}
+
 func (m Model) renderCmd(seq int, req preview.Request) tea.Cmd {
 	fn := m.renderFn
 	ctx := m.ctx
 	return func() tea.Msg {
 		text, err := fn(ctx, req)
-		return previewFrameMsg{seq: seq, text: text, err: err}
+		return previewFrameMsg{seq: seq, req: req, text: text, err: err}
 	}
 }
 
@@ -161,10 +219,17 @@ func (m Model) handlePreviewFrame(msg previewFrameMsg) (tea.Model, tea.Cmd) {
 		return m, nil // superseded by a newer request
 	}
 	m.preview.pendingSeq = 0
-	if msg.err != nil {
+	switch {
+	case msg.err != nil:
 		m.preview.frameErr = msg.err.Error()
 		m.preview.frame = ""
-	} else {
+		m.preview.image = ""
+	case msg.req.ImageID != 0:
+		m.preview.frameErr = ""
+		m.preview.image = msg.text
+		m.preview.imageID = msg.req.ImageID
+		m.preview.imageCols, m.preview.imageRows = msg.req.Cols, msg.req.Rows
+	default:
 		m.preview.frameErr = ""
 		m.preview.frame = msg.text
 	}
@@ -316,13 +381,14 @@ func (m Model) previewBoxLines() []string {
 		label = successStyle.Render("result")
 	}
 
+	// A kitty image is drawn over the box's (blank) content by syncImage.
 	var content []string
 	switch {
-	case !m.rendererAvailable:
+	case !m.canRender():
 		content = []string{dimStyle.Render("install chafa for preview")}
 	case m.preview.frameErr != "":
 		content = []string{errorStyle.Render(oneLine(m.preview.frameErr))}
-	case m.preview.frame != "":
+	case m.preview.frame != "" && !m.graphics:
 		content = strings.Split(m.preview.frame, "\n")
 	}
 
@@ -337,4 +403,52 @@ func (m Model) previewBoxLines() []string {
 	}
 	lines = append(lines, boxBottom(cols+2))
 	return lines
+}
+
+// previewOrigin is the screen position (0-based column, row) of the
+// preview box's first content cell: inside the main frame's left border
+// and top border, and the preview box's own.
+func previewOrigin() (x, y int) {
+	return 2, 2
+}
+
+// imageVisible reports whether the preview's kitty image belongs on
+// screen: on the main screen with nothing drawn over the preview box, and
+// only while the image was rendered for the box's current size (a stale
+// one could spill past a box that has since shrunk).
+func (m Model) imageVisible() bool {
+	if !m.graphics || m.preview.image == "" || m.quitting || m.tooSmall() ||
+		m.mode != modeMain || m.run.phase != runNone || m.modal != nil || m.showHelp {
+		return false
+	}
+	cols, rows := m.previewBoxSize()
+	return m.preview.imageCols == cols && m.preview.imageRows == rows
+}
+
+// syncImage draws or deletes the preview's kitty image so what is on
+// screen matches imageVisible and the latest image. Bubble Tea's renderer
+// only ever draws text, so the image is written straight to the terminal,
+// at previewOrigin (the cursor is saved and restored around it, so the
+// renderer's idea of where it is stays true); it runs after every Update,
+// like rerenderIfBoxResized, rather than at each place that can change
+// whether the image belongs on screen. A new image is drawn before the
+// one it replaces is deleted, so frames change without a blank between.
+func (m Model) syncImage() (Model, tea.Cmd) {
+	want := 0
+	if m.imageVisible() {
+		want = m.preview.imageID
+	}
+	if want == m.preview.drawnID {
+		return m, nil
+	}
+	var seq string
+	if want != 0 {
+		x, y := previewOrigin()
+		seq = ansi.SaveCursor + ansi.CursorPosition(x+1, y+1) + m.preview.image + ansi.RestoreCursor
+	}
+	if m.preview.drawnID != 0 {
+		seq += preview.DeleteKittyImage(m.preview.drawnID)
+	}
+	m.preview.drawnID = want
+	return m, tea.Raw(seq)
 }
