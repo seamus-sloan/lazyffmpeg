@@ -27,7 +27,18 @@ type Config struct {
 	DryRun      bool
 	ShowVersion bool
 	ShowHelp    bool
+
+	// Symbols prints the frame at SymbolsTime (input-timeline seconds) as
+	// plain-text symbols, SymbolsWidth columns wide, instead of running
+	// anything.
+	Symbols      bool
+	SymbolsTime  float64
+	SymbolsWidth int
 }
+
+// DefaultSymbolsWidth is --symbols' width, in columns, when
+// --symbols-width is not given.
+const DefaultSymbolsWidth = 100
 
 // Usage is the full help text listing every flag.
 const Usage = `Usage: lazyff [<input>] [flags]
@@ -61,6 +72,9 @@ Other flags:
   --force                 overwrite an existing output
   --tui                   open the TUI (even with step flags)
   --dry-run               print the ffmpeg command, run nothing
+  --symbols T             print the frame at time T as plain-text
+                          braille symbols, run nothing (needs chafa)
+  --symbols-width N       columns wide for --symbols (default 100)
   --version               print the version
   -h, --help              show this help
 `
@@ -70,6 +84,7 @@ var valueFlagNames = map[string]bool{
 	"--trim-start": true, "--trim-end": true, "--fps": true, "--encoder": true,
 	"--crf": true, "--target-size": true, "--audio": true, "--container": true,
 	"--name": true, "--args": true, "-o": true,
+	"--symbols": true, "--symbols-width": true,
 }
 
 var boolFlagNames = map[string]bool{
@@ -103,6 +118,7 @@ type parser struct {
 // step-flag order.
 func Parse(args []string) (Config, error) {
 	pr := &parser{seen: map[string]bool{}}
+	pr.cfg.SymbolsWidth = DefaultSymbolsWidth
 
 	var positionals []string
 	endOfFlags := false
@@ -205,6 +221,19 @@ func Parse(args []string) (Config, error) {
 	}
 	if pr.cfg.TUI && pr.cfg.DryRun {
 		return Config{}, usageErr("--tui cannot be combined with --dry-run")
+	}
+	if pr.seen["--symbols-width"] && !pr.cfg.Symbols {
+		return Config{}, usageErr("--symbols-width needs --symbols")
+	}
+	if pr.cfg.Symbols {
+		if pr.cfg.HasSteps {
+			return Config{}, usageErr("--symbols prints the input's own frame; it cannot be combined with step flags")
+		}
+		for _, name := range []string{"-o", "--in-place", "--force", "--tui", "--dry-run"} {
+			if pr.seen[name] {
+				return Config{}, usageErr("--symbols runs nothing; it cannot be combined with %s", name)
+			}
+		}
 	}
 
 	// Whether --in-place can keep the input's own container is checked in
@@ -379,6 +408,21 @@ func (pr *parser) applyValue(name, val string) error {
 		}
 		pr.pl = pr.pl.Upsert(pipeline.RawArgs{Text: val, Args: parts})
 		pr.cfg.HasSteps = true
+
+	case "--symbols":
+		t, err := units.ParseTime(val)
+		if err != nil {
+			return usageErr("invalid value for --symbols: %q", val)
+		}
+		pr.cfg.Symbols = true
+		pr.cfg.SymbolsTime = t
+
+	case "--symbols-width":
+		n, err := strconv.Atoi(val)
+		if err != nil || n < 1 {
+			return usageErr("invalid value for --symbols-width: %q", val)
+		}
+		pr.cfg.SymbolsWidth = n
 
 	case "-o":
 		pr.cfg.Output = val

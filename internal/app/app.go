@@ -16,6 +16,7 @@ import (
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/cli"
 	"github.com/seamus-sloan/lazyffmpeg/internal/pipeline"
+	"github.com/seamus-sloan/lazyffmpeg/internal/preview"
 	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 	"github.com/seamus-sloan/lazyffmpeg/internal/runner"
 	"github.com/seamus-sloan/lazyffmpeg/internal/units"
@@ -170,8 +171,12 @@ func (a App) Main(ctx context.Context, args []string) int {
 	}
 
 	if input == "" {
-		if cfg.DryRun {
-			fmt.Fprintf(a.Stderr, "lazyff: %s\nRun 'lazyff --help' for usage.\n", "--dry-run needs an input file")
+		if cfg.DryRun || cfg.Symbols {
+			flag := "--dry-run"
+			if cfg.Symbols {
+				flag = "--symbols"
+			}
+			fmt.Fprintf(a.Stderr, "lazyff: %s needs an input file\nRun 'lazyff --help' for usage.\n", flag)
 			return 2
 		}
 		session := Session{
@@ -193,6 +198,10 @@ func (a App) Main(ctx context.Context, args []string) int {
 	if err != nil {
 		fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
 		return 1
+	}
+
+	if cfg.Symbols {
+		return a.printSymbols(ctx, input, info, cfg)
 	}
 
 	session := Session{
@@ -285,6 +294,32 @@ func (a App) Main(ctx context.Context, args []string) int {
 	fmt.Fprintln(a.Stdout, result.Output)
 	fmt.Fprintln(a.Stdout, units.FormatSizeChange(info.SizeBytes, result.Size))
 
+	return 0
+}
+
+// printSymbols prints input's frame at cfg.SymbolsTime as plain-text
+// symbols, cfg.SymbolsWidth columns wide (see preview.Request.Plain).
+func (a App) printSymbols(ctx context.Context, input string, info probe.Info, cfg cli.Config) int {
+	if !preview.Available() {
+		fmt.Fprintln(a.Stderr, "lazyff: chafa not found on PATH (brew install chafa)")
+		return 1
+	}
+	if info.Duration > 0 && cfg.SymbolsTime >= info.Duration {
+		fmt.Fprintf(a.Stderr, "lazyff: --symbols %s is past the end of the input (%s)\n",
+			units.FormatClock(cfg.SymbolsTime), units.FormatClock(info.Duration))
+		return 1
+	}
+	text, err := preview.Render(ctx, preview.Request{
+		Input: input,
+		Time:  cfg.SymbolsTime,
+		Cols:  cfg.SymbolsWidth,
+		Plain: true,
+	})
+	if err != nil {
+		fmt.Fprintf(a.Stderr, "lazyff: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(a.Stdout, text)
 	return 0
 }
 

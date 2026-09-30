@@ -809,3 +809,51 @@ func TestSameAsInput(t *testing.T) {
 		t.Error("SameAsInput(in, out) = true, want false")
 	}
 }
+
+func TestMainSymbolsPrintsTheFrameAsBraille(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe", "chafa")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--symbols", "0.5", "--symbols-width", "40"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr %q)", code, errOut.String())
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	if len(lines) != 15 {
+		t.Errorf("printed %d lines, want 15 (40 columns of a 4:3 frame)", len(lines))
+	}
+	for i, line := range lines {
+		if n := len([]rune(line)); n != 40 {
+			t.Errorf("line %d is %d columns, want 40", i, n)
+		}
+	}
+}
+
+func TestMainSymbolsPastTheEnd(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe", "chafa")
+	in := testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+
+	a, out, errOut := newApp()
+	code := a.Main(context.Background(), []string{in, "--symbols", "5"})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if out.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing", out.String())
+	}
+	if !strings.Contains(errOut.String(), "past the end") {
+		t.Errorf("stderr = %q, want it to say the time is past the end", errOut.String())
+	}
+}
+
+func TestMainSymbolsNeedsAnInputFile(t *testing.T) {
+	a, _, errOut := newApp()
+	code := a.Main(context.Background(), []string{t.TempDir(), "--symbols", "1"})
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "--symbols needs an input file") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}

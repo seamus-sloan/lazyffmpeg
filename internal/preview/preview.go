@@ -34,6 +34,13 @@ type Request struct {
 	// the preview box's size in pixels, PixelWidth x PixelHeight.
 	ImageID                 int
 	PixelWidth, PixelHeight int
+
+	// Plain renders the frame as plain text, as detailed as it can be
+	// without color: braille dots (2x4 to a cell) dithered by error
+	// diffusion, so shading survives as dot density. It is Cols wide and
+	// as many rows tall as the frame's aspect ratio needs; Rows and
+	// Colors are ignored.
+	Plain bool
 }
 
 // FrameArgs is the ffmpeg argv that decodes Request's frame to PNG on
@@ -41,11 +48,15 @@ type Request struct {
 // an image render scales it down to fit the box's PixelWidth x
 // PixelHeight, but never up past the frame's own size (the terminal
 // scales the image up to the box itself, so upscaling here would only
-// send more bytes).
+// send more bytes); a plain render scales it down to at most Cols*8
+// pixels wide, all the detail chafa samples from each cell.
 func FrameArgs(r Request) []string {
 	fit := fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease", r.Cols*4, r.Rows*8)
-	if r.ImageID != 0 {
+	switch {
+	case r.ImageID != 0:
 		fit = fmt.Sprintf("scale='min(iw,%d)':'min(ih,%d)':force_original_aspect_ratio=decrease", r.PixelWidth, r.PixelHeight)
+	case r.Plain:
+		fit = fmt.Sprintf("scale='min(iw,%d)':-1", r.Cols*8)
 	}
 	vf := fit
 	if r.Filter != "" {
@@ -64,8 +75,24 @@ func FrameArgs(r Request) []string {
 }
 
 // ChafaArgs is the chafa argv that renders a PNG read from stdin as
-// Cols x Rows terminal symbols.
+// Cols x Rows terminal symbols, or as a plain render (see Request.Plain):
+// chafa's most thorough work, with the rows left to follow the frame's
+// aspect ratio.
 func ChafaArgs(r Request) []string {
+	if r.Plain {
+		return []string{
+			"chafa",
+			"--format", "symbols",
+			"--size", fmt.Sprintf("%dx", r.Cols),
+			"--animate", "off",
+			"--polite", "on",
+			"--colors", "none",
+			"--symbols", "braille",
+			"--dither", "diffusion",
+			"--work", "9",
+			"-",
+		}
+	}
 	return []string{
 		"chafa",
 		"--format", "symbols",
@@ -87,7 +114,7 @@ func Available() bool {
 // to stdout. For an image render (r.ImageID != 0) it returns KittyImage's
 // sequence for them; otherwise it feeds that buffer to chafa's stdin
 // (never through a shell) and returns chafa's symbols, at most r.Rows
-// lines of them.
+// lines of them (however many a plain render needs).
 func Render(ctx context.Context, r Request) (string, error) {
 	ffArgv := FrameArgs(r)
 	ffCmd := exec.CommandContext(ctx, ffArgv[0], ffArgv[1:]...)
@@ -113,7 +140,7 @@ func Render(ctx context.Context, r Request) (string, error) {
 	}
 
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-	if len(lines) > r.Rows {
+	if !r.Plain && len(lines) > r.Rows {
 		lines = lines[:r.Rows]
 	}
 	return strings.Join(lines, "\n"), nil
