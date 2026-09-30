@@ -61,7 +61,11 @@ func (m Model) handleSymbolsCopied(msg symbolsCopiedMsg) (tea.Model, tea.Cmd) {
 		m.notice = "copying the frame failed: " + oneLine(msg.err.Error())
 		return m, nil
 	}
-	m.notice = fmt.Sprintf("copied the frame at %s as %d×%d symbols", units.FormatClock(msg.time), msg.cols, msg.rows)
+	what := "the frame at " + units.FormatClock(msg.time)
+	if m.isImage() {
+		what = "the image"
+	}
+	m.notice = fmt.Sprintf("copied %s as %d×%d symbols", what, msg.cols, msg.rows)
 	if msg.text != "" {
 		// No system clipboard (e.g. over SSH): ask the terminal to take it.
 		m.notice += " (via the terminal)"

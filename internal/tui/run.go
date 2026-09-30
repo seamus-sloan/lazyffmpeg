@@ -247,7 +247,13 @@ func (m Model) handleRunKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfirmOverwriteKey(msg)
 	case runRunning:
 		return m.handleRunningKey(msg)
-	case runDone, runError:
+	case runDone:
+		if msg.String() == "o" && !m.run.canceled {
+			return m.openOutput()
+		}
+		m.run = runState{}
+		return m, nil
+	case runError:
 		m.run = runState{}
 		return m, nil
 	}
@@ -359,7 +365,7 @@ func (m Model) runBodyLines() []string {
 		if rs.result.Size < rs.inputSize {
 			change = successStyle.Render(units.FormatSizeChange(rs.inputSize, rs.result.Size))
 		}
-		return []string{wrote, change, "", continueHint}
+		return []string{wrote, change, "", openHint + dimStyle.Render(" · ") + continueHint}
 
 	case runError:
 		var exitErr *runner.ExitError
@@ -384,6 +390,9 @@ func (m Model) runBodyLines() []string {
 
 // continueHint closes the done, canceled and error screens.
 var continueHint = dimStyle.Render("press any key to continue")
+
+// openHint offers to open a finished run's output (see openOutput).
+var openHint = keyStyle.Render("o") + dimStyle.Render(" open it")
 
 func (m Model) renderRunFrame() string {
 	width := m.width

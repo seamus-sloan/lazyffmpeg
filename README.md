@@ -75,7 +75,8 @@ Other flags: `-o PATH`, `--in-place`, `--force`, `--tui`, `--dry-run`,
 `--symbols T` prints the frame at time `T` (seconds or `[hh:]mm:ss[.ms]`)
 as plain text and runs nothing: braille dots dithered for shading, 100
 columns wide or `--symbols-width N`, as many rows as the frame needs. It
-needs `chafa` and takes no step flags or output flags.
+needs `chafa` and takes no step flags or output flags. For an image, `T`
+is ignored (pass `0`).
 
 ### Images
 
@@ -178,8 +179,9 @@ goes back to the default name, and `u` undoes either.
 ### Run
 
 `y`/`n` answer an overwrite confirmation. While running, `esc` asks to
-cancel; `q`/`ctrl+c` asks to cancel and quit. Any key dismisses the result
-or error screen.
+cancel; `q`/`ctrl+c` asks to cancel and quit. On the result screen `o`
+opens the output in its default app (`open`, `xdg-open` or `start`); any
+other key dismisses it, or the error screen.
 
 ## How the pipeline compiles
 
@@ -194,8 +196,9 @@ ffmpeg -hide_banner -nostdin -i <input>
   <output>
 ```
 
-- The four filter steps (resolution, speed, trim, frame rate) join, in
-  the order you arranged them, into one `-vf` chain and one `-af` chain.
+- The filter steps (resolution, crop, rotate/flip, speed, trim, frame
+  rate) join, in the order you arranged them, into one `-vf` chain and
+  one `-af` chain.
   A resolution step with both sides set fits inside that box keeping
   aspect ratio; a trailing `!` (or `--stretch`) scales to it exactly.
 - Default encoder (no Encoder step): `libx264`, CRF 23, `-preset medium`,
@@ -216,6 +219,10 @@ ffmpeg -hide_banner -nostdin -i <input>
 - Raw args (`--args`, quote-aware, no shell) are inserted right before
   the output path.
 - A File name step adds no arguments: it only changes `<output>`.
+- An image compiles to `ffmpeg -i <input> -map 0:V:0 [-vf <chain>]
+  -frames:v 1 <codec args> -update 1 [raw args] <output>`: `png`,
+  `tiff` or `bmp`, `mjpeg -q:v 2`–`31` for JPEG, or `libsvtav1 -crf`
+  for AVIF, per the output's format.
 
 The footer's `~<size>` estimate is a rough heuristic: output pixels × fps
 × duration × a per-encoder/CRF bits-per-pixel factor, plus the audio

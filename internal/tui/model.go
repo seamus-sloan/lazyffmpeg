@@ -138,6 +138,7 @@ type Model struct {
 	probeFn     ProbeFunc
 	runFn       RunFunc
 	clipboardFn ClipboardFunc
+	openFn      OpenFunc
 	runWG       *sync.WaitGroup // owned by Run; tracks in-flight runs across program exit
 }
 
@@ -174,6 +175,7 @@ func New(s app.Session, opts ...Option) Model {
 		runFn:    runner.Run,
 
 		clipboardFn: clipboard.WriteAll,
+		openFn:      openFile,
 
 		renderFn:          preview.Render,
 		rendererAvailable: preview.Available(),
@@ -279,6 +281,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case symbolsCopiedMsg:
 		return m.handleSymbolsCopied(msg)
+
+	case openedMsg:
+		return m.handleOpened(msg)
 	}
 	return m, nil
 }
