@@ -932,3 +932,48 @@ func TestMainSymbolsOfAnImageIgnoresTheTime(t *testing.T) {
 		t.Errorf("printed %d lines, want 15", lines)
 	}
 }
+
+func TestMainHeadlessCropsAndRotates(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		w, h int
+	}{
+		{"square crop", []string{"--crop", "1:1"}, 240, 240},
+		{"quarter turn", []string{"--rotate", "90"}, 240, 320},
+		{"box crop at an offset, then a flip", []string{"--crop", "100x50+10+10", "--flip", "h"}, 100, 50},
+		{"turn, then a 16:9 crop", []string{"--rotate", "270", "--crop", "16:9"}, 240, 134},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, input := range []string{"pic.png", "clip.mp4"} {
+				var in string
+				if input == "pic.png" {
+					in = testclip.MakeImage(t, input, 320, 240)
+				} else {
+					in = testclip.Make(t, testclip.Spec{Width: 320, Height: 240, Seconds: 1})
+				}
+				a, _, errOut := newApp()
+				args := append([]string{in, "--name", "out"}, tt.args...)
+				if code := a.Main(context.Background(), args); code != 0 {
+					t.Fatalf("%s: exit code = %d, want 0 (stderr %q)", input, code, errOut.String())
+				}
+				out := filepath.Join(filepath.Dir(in), "out"+filepath.Ext(in))
+				if w, h := imageSize(t, out); w != tt.w || h != tt.h {
+					t.Errorf("%s: wrote %dx%d, want %dx%d", input, w, h, tt.w, tt.h)
+				}
+			}
+		})
+	}
+}
+
+func TestMainHeadlessRefusesACropOutsideTheFrame(t *testing.T) {
+	in := testclip.MakeImage(t, "pic.png", 320, 240)
+	a, _, errOut := newApp()
+	if code := a.Main(context.Background(), []string{in, "--crop", "300x200+100+0"}); code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "crop is outside the frame") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}

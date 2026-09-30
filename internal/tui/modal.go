@@ -74,6 +74,24 @@ func presetsFor(kind pipeline.Kind, codec pipeline.Codec, image bool) []modalOpt
 			{"4x", pipeline.Speed{Factor: 4}},
 			{"Custom…", nil},
 		}
+	case pipeline.KindCrop:
+		return []modalOption{
+			{"1:1", pipeline.Crop{AspectW: 1, AspectH: 1}},
+			{"4:3", pipeline.Crop{AspectW: 4, AspectH: 3}},
+			{"3:2", pipeline.Crop{AspectW: 3, AspectH: 2}},
+			{"16:9", pipeline.Crop{AspectW: 16, AspectH: 9}},
+			{"9:16", pipeline.Crop{AspectW: 9, AspectH: 16}},
+			{"Custom…", nil},
+		}
+	case pipeline.KindRotate:
+		return []modalOption{
+			{"90° clockwise", pipeline.Rotate{Degrees: 90}},
+			{"90° counter-clockwise", pipeline.Rotate{Degrees: 270}},
+			{"180°", pipeline.Rotate{Degrees: 180}},
+			{"Flip horizontal", pipeline.Rotate{Flip: pipeline.FlipHorizontal}},
+			{"Flip vertical", pipeline.Rotate{Flip: pipeline.FlipVertical}},
+			{"Custom…", nil},
+		}
 	case pipeline.KindTrim:
 		return []modalOption{{"Custom…", nil}}
 	case pipeline.KindFrameRate:
@@ -135,6 +153,10 @@ func placeholderFor(kind pipeline.Kind) string {
 		return "WxH (fit), WxH! (stretch), Wx, xH, 50%"
 	case pipeline.KindTrim:
 		return "0:05-0:20"
+	case pipeline.KindCrop:
+		return "16:9, 800x600 (centered), 800x600+X+Y"
+	case pipeline.KindRotate:
+		return "90, 180, 270, h, v, or e.g. 90 h"
 	}
 	return ""
 }
@@ -171,6 +193,16 @@ func customPrefill(s pipeline.Step) string {
 		case v.Height > 0:
 			return fmt.Sprintf("x%d", v.Height)
 		}
+	case pipeline.Crop:
+		switch {
+		case v.AspectW > 0:
+			return fmt.Sprintf("%d:%d", v.AspectW, v.AspectH)
+		case v.Offset:
+			return fmt.Sprintf("%dx%d+%d+%d", v.Width, v.Height, v.X, v.Y)
+		}
+		return fmt.Sprintf("%dx%d", v.Width, v.Height)
+	case pipeline.Rotate:
+		return strings.TrimSpace(strings.TrimPrefix(fmt.Sprintf("%d %s", v.Degrees, v.Flip), "0 "))
 	case pipeline.Speed:
 		return units.FormatNumber(v.Factor) + "x"
 	case pipeline.Trim:
@@ -211,6 +243,18 @@ func parseCustom(kind pipeline.Kind, text string) (pipeline.Step, error) {
 	switch kind {
 	case pipeline.KindResolution:
 		v, err := pipeline.ParseResolution(text)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	case pipeline.KindCrop:
+		v, err := pipeline.ParseCrop(text)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	case pipeline.KindRotate:
+		v, err := pipeline.ParseRotate(text)
 		if err != nil {
 			return nil, err
 		}

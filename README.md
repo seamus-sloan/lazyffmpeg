@@ -52,6 +52,9 @@ and moves straight to the editor, keeping any step flags and `-o`/
 | `--height N` | pixels | target height |
 | `--scale PCT` | e.g. `50%` | scale by percentage |
 | `--stretch` | — | with both `--width`/`--height`, scale to exactly that size instead of fitting inside it |
+| `--crop SPEC` | `W:H`, `WxH`, `WxH+X+Y` | crop to an aspect ratio (the largest centered region), a centered box, or a box at an offset |
+| `--rotate DEG` | `90 180 270` | rotate clockwise |
+| `--flip h\|v` | `h` or `v` | mirror horizontally or vertically (merges with `--rotate` into one step) |
 | `--speed F` | e.g. `2`, `1.5` | playback speed factor |
 | `--trim-start T` | seconds or `[hh:]mm:ss[.ms]` | trim start |
 | `--trim-end T` | seconds or `[hh:]mm:ss[.ms]` | trim end |
@@ -76,9 +79,9 @@ needs `chafa` and takes no step flags or output flags.
 
 `<input>` can also be a still image: PNG, JPEG, AVIF, WebP, HEIC, TIFF or
 BMP. The TUI then offers only the steps that apply to one (Resolution,
-with longest-side presets, File name and Raw args), the preview has no
-timeline to seek, play or trim, and step flags for time, audio or
-encoding are refused. The output keeps the input's format
+with longest-side presets, Crop, Rotate / flip, File name and Raw args),
+the preview has no timeline to seek, play or trim, and step flags for
+time, audio or encoding are refused. The output keeps the input's format
 (`photo (edited).jpg`) when lazyff can write it (PNG, JPEG, AVIF, TIFF,
 BMP), else it is written as PNG; a File name ending in one of those
 extensions converts to that format (`--name photo.avif`).

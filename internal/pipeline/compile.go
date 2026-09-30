@@ -52,7 +52,7 @@ func Compile(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 
 func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 	if probe.IsImage(opt.Input) {
-		return buildImage(p, opt)
+		return buildImage(info, p, opt)
 	}
 	steps := p.Steps()
 	for _, s := range steps {
@@ -64,6 +64,9 @@ func build(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 		return nil, err
 	}
 	if _, err := walkTimeline(steps, info.Duration); err != nil {
+		return nil, err
+	}
+	if err := checkFrameSize(info, p); err != nil {
 		return nil, err
 	}
 	outDur := OutputDuration(info, p)

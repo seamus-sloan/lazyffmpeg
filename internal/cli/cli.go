@@ -53,6 +53,10 @@ Step flags (applied to the pipeline in the order given):
   --scale PCT             scale by percent, e.g. 50%
   --stretch               with --width and --height, scale to exactly
                           that size instead of fitting inside it
+  --crop SPEC             crop to W:H (an aspect ratio, the largest
+                          centered region), WxH (centered) or WxH+X+Y
+  --rotate DEG            rotate clockwise: 90, 180 or 270
+  --flip h|v              mirror horizontally or vertically
   --speed F               playback speed factor, e.g. 2, 1.5
   --trim-start T          trim start (seconds or [hh:]mm:ss[.ms])
   --trim-end T            trim end (seconds or [hh:]mm:ss[.ms])
@@ -87,6 +91,7 @@ var valueFlagNames = map[string]bool{
 	"--crf": true, "--target-size": true, "--audio": true, "--container": true,
 	"--name": true, "--args": true, "-o": true,
 	"--symbols": true, "--symbols-width": true,
+	"--crop": true, "--rotate": true, "--flip": true,
 }
 
 var boolFlagNames = map[string]bool{
@@ -112,6 +117,9 @@ type parser struct {
 
 	hasCRF    bool
 	hasTarget bool
+
+	rot    pipeline.Rotate
+	hasRot bool
 
 	stretchSeen bool
 }
@@ -195,6 +203,11 @@ func Parse(args []string) (Config, error) {
 	if pr.hasTrim {
 		if err := pr.trim.Validate(); err != nil {
 			return Config{}, usageErr("invalid trim: %v", err)
+		}
+	}
+	if pr.hasRot {
+		if err := pr.rot.Validate(); err != nil {
+			return Config{}, usageErr("invalid rotation: %v", err)
 		}
 	}
 
@@ -310,6 +323,31 @@ func (pr *parser) applyValue(name, val string) error {
 		pr.hasScale = true
 		pr.res.Percent = pct
 		return pr.commitResolution()
+
+	case "--crop":
+		c, err := pipeline.ParseCrop(val)
+		if err != nil {
+			return usageErr("invalid value for --crop: %q", val)
+		}
+		pr.pl = pr.pl.Upsert(c)
+		pr.cfg.HasSteps = true
+
+	case "--rotate":
+		deg, err := strconv.Atoi(strings.TrimSuffix(val, "°"))
+		if err != nil {
+			return usageErr("invalid value for --rotate: %q", val)
+		}
+		pr.rot.Degrees = ((deg % 360) + 360) % 360
+		pr.commitRotate()
+
+	case "--flip":
+		switch f := pipeline.Flip(strings.ToLower(val)); f {
+		case pipeline.FlipHorizontal, pipeline.FlipVertical:
+			pr.rot.Flip = f
+		default:
+			return usageErr("invalid value for --flip: %q (h or v)", val)
+		}
+		pr.commitRotate()
 
 	case "--speed":
 		sp, err := pipeline.ParseSpeed(val)
@@ -439,6 +477,15 @@ func (pr *parser) commitResolution() error {
 	pr.pl = pr.pl.Upsert(pr.res)
 	pr.cfg.HasSteps = true
 	return nil
+}
+
+// commitRotate records the merged --rotate/--flip values at the position
+// of the first of those flags, validated once the whole command line is
+// read (see Parse), as commitTrim's are.
+func (pr *parser) commitRotate() {
+	pr.hasRot = true
+	pr.pl = pr.pl.Upsert(pr.rot)
+	pr.cfg.HasSteps = true
 }
 
 // commitTrim records the merged --trim-start/--trim-end values at the

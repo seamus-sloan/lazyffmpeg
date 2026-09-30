@@ -3,6 +3,7 @@ package pipeline
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 )
@@ -107,12 +108,17 @@ func PlaybackRate(p Pipeline) float64 {
 	return 1
 }
 
-// SpatialVideoFilter returns the pipeline's Resolution step's video
-// filter (fps and other non-spatial filters are irrelevant to a still
-// preview frame), or "" when there is none.
+// SpatialVideoFilter returns the video filters of the pipeline's spatial
+// steps (see Kind.IsSpatial), in order (fps and other non-spatial filters
+// are irrelevant to a still preview frame), or "" when there are none.
 func SpatialVideoFilter(p Pipeline) string {
-	if r, ok := p.Find(KindResolution); ok {
-		return r.(Resolution).VideoFilter()
+	var f []string
+	for _, s := range p.Steps() {
+		if s.Kind().IsSpatial() {
+			if v := s.(FilterStep).VideoFilter(); v != "" {
+				f = append(f, v)
+			}
+		}
 	}
-	return ""
+	return strings.Join(f, ",")
 }

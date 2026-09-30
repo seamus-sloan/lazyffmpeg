@@ -538,3 +538,47 @@ func TestParseSymbolsUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCropRotateFlip(t *testing.T) {
+	cfg, err := Parse([]string{"in.png", "--crop", "16:9", "--rotate", "90", "--speed", "2", "--flip", "h"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	steps := cfg.Pipeline.Steps()
+	want := []pipeline.Step{
+		pipeline.Crop{AspectW: 16, AspectH: 9},
+		pipeline.Rotate{Degrees: 90, Flip: pipeline.FlipHorizontal},
+		pipeline.Speed{Factor: 2},
+	}
+	if len(steps) != len(want) {
+		t.Fatalf("steps = %v, want %v", steps, want)
+	}
+	for i := range want {
+		if steps[i] != want[i] {
+			t.Errorf("step %d = %+v, want %+v", i, steps[i], want[i])
+		}
+	}
+
+	cfg, err = Parse([]string{"in.png", "--flip", "V", "--rotate", "-90"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := mustFind(t, cfg.Pipeline, pipeline.KindRotate); got != (pipeline.Rotate{Degrees: 270, Flip: pipeline.FlipVertical}) {
+		t.Errorf("rotate = %+v, want 270° flipped vertically", got)
+	}
+}
+
+func TestParseCropRotateFlipUsageErrors(t *testing.T) {
+	cases := map[string][]string{
+		"bad crop":        {"in.png", "--crop", "wide"},
+		"odd rotation":    {"in.png", "--rotate", "45"},
+		"no-op rotation":  {"in.png", "--rotate", "0"},
+		"bad flip":        {"in.png", "--flip", "x"},
+		"rotate as words": {"in.png", "--rotate", "left"},
+	}
+	for name, args := range cases {
+		if _, err := Parse(args); !errors.Is(err, ErrUsage) {
+			t.Errorf("%s: err = %v, want ErrUsage", name, err)
+		}
+	}
+}

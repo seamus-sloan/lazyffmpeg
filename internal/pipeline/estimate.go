@@ -102,32 +102,38 @@ func bppFor(codec Codec) float64 {
 }
 
 // OutputDimensions returns the compiled output's pixel dimensions: the
-// fitted (or exact/stretched) box for a Resolution step, a single explicit
-// side rounded down to even with the other side aspect-scaled to even, or
-// the input's own size when there is no Resolution step.
+// input's size carried through each Resolution, Crop and Rotate step in
+// order (see frameSize). A Crop that does not fit leaves the input's own
+// size, since Validate rejects that pipeline anyway.
 func OutputDimensions(info probe.Info, p Pipeline) (w, h int) {
-	iw, ih := info.Video.Width, info.Video.Height
-	r, ok := p.Find(KindResolution)
-	if !ok {
-		return iw, ih
+	w, h, err := frameSize(info.Video.Width, info.Video.Height, p)
+	if err != nil {
+		return info.Video.Width, info.Video.Height
 	}
-	res := r.(Resolution).Normalize()
+	return w, h
+}
+
+// resize returns a w x h frame's size after the step: the fitted (or
+// exact/stretched) box, a single explicit side rounded down to even with
+// the other side aspect-scaled to even, or a percentage of both.
+func (r Resolution) resize(w, h int) (int, int, error) {
+	res := r.Normalize()
 	switch {
 	case res.Percent > 0:
 		frac := res.Percent / 100
-		return evenFloor(float64(iw) * frac), evenFloor(float64(ih) * frac)
+		return evenFloor(float64(w) * frac), evenFloor(float64(h) * frac), nil
 	case res.Width > 0 && res.Height > 0:
 		if res.Exact {
-			return res.Width, res.Height
+			return res.Width, res.Height, nil
 		}
-		scale := math.Min(float64(res.Width)/float64(iw), float64(res.Height)/float64(ih))
-		return evenRound(float64(iw) * scale), evenRound(float64(ih) * scale)
+		scale := math.Min(float64(res.Width)/float64(w), float64(res.Height)/float64(h))
+		return evenRound(float64(w) * scale), evenRound(float64(h) * scale), nil
 	case res.Width > 0:
-		return res.Width, evenRound(float64(ih) * float64(res.Width) / float64(iw))
+		return res.Width, evenRound(float64(h) * float64(res.Width) / float64(w)), nil
 	case res.Height > 0:
-		return evenRound(float64(iw) * float64(res.Height) / float64(ih)), res.Height
+		return evenRound(float64(w) * float64(res.Height) / float64(h)), res.Height, nil
 	}
-	return iw, ih
+	return w, h, nil
 }
 
 func evenFloor(x float64) int {

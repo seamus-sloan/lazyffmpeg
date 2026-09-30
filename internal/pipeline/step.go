@@ -29,12 +29,24 @@ const (
 	KindContainer
 	KindFilename
 	KindRawArgs
+	KindCrop
+	KindRotate
 )
 
-// IsFilter reports whether k is one of the four ordered filter steps.
+// IsFilter reports whether k is one of the ordered filter steps.
 func (k Kind) IsFilter() bool {
 	switch k {
-	case KindResolution, KindSpeed, KindTrim, KindFrameRate:
+	case KindResolution, KindCrop, KindRotate, KindSpeed, KindTrim, KindFrameRate:
+		return true
+	}
+	return false
+}
+
+// IsSpatial reports whether k is a filter step that reshapes the frame
+// rather than the timeline: the ones a still preview frame shows.
+func (k Kind) IsSpatial() bool {
+	switch k {
+	case KindResolution, KindCrop, KindRotate:
 		return true
 	}
 	return false
@@ -63,6 +75,10 @@ func (k Kind) Label() string {
 		return "File name"
 	case KindRawArgs:
 		return "Raw args"
+	case KindCrop:
+		return "Crop"
+	case KindRotate:
+		return "Rotate / flip"
 	}
 	return ""
 }

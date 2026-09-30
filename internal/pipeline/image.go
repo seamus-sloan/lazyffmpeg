@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/seamus-sloan/lazyffmpeg/internal/probe"
 )
 
 // ImageFormat names a still-image file format lazyff writes.
@@ -52,11 +54,7 @@ func ImageFormatOf(path string) ImageFormat {
 // still image: the spatial ones and the output's name and raw arguments,
 // but nothing about time, audio or video encoding.
 func (k Kind) AppliesToImage() bool {
-	switch k {
-	case KindResolution, KindFilename, KindRawArgs:
-		return true
-	}
-	return false
+	return k.IsSpatial() || k == KindFilename || k == KindRawArgs
 }
 
 // imageEncoderArgs are the ffmpeg arguments that encode one frame as f:
@@ -77,7 +75,7 @@ func imageEncoderArgs(f ImageFormat) []string {
 // filters applied to its one frame, written as the format opt.Output's
 // extension names. -update 1 tells ffmpeg's image muxer the output is one
 // file, not a numbered sequence.
-func buildImage(p Pipeline, opt Options) ([]string, error) {
+func buildImage(info probe.Info, p Pipeline, opt Options) ([]string, error) {
 	steps := p.Steps()
 	for _, s := range steps {
 		if !s.Kind().AppliesToImage() {
@@ -88,6 +86,9 @@ func buildImage(p Pipeline, opt Options) ([]string, error) {
 		}
 	}
 	if err := checkFilename(p, opt.Input); err != nil {
+		return nil, err
+	}
+	if err := checkFrameSize(info, p); err != nil {
 		return nil, err
 	}
 	format := ImageFormatOf(opt.Output)

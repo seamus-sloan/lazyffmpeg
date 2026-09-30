@@ -22,7 +22,8 @@ func imageSession(pl pipeline.Pipeline) app.Session {
 func TestImageMenuOffersOnlyImageSteps(t *testing.T) {
 	m := resized(New(imageSession(pipeline.New())), 100, 30)
 
-	want := []pipeline.Kind{pipeline.KindResolution, pipeline.KindFilename, pipeline.KindRawArgs}
+	want := []pipeline.Kind{pipeline.KindResolution, pipeline.KindCrop, pipeline.KindRotate,
+		pipeline.KindFilename, pipeline.KindRawArgs}
 	got := m.menuKinds()
 	if len(got) != len(want) {
 		t.Fatalf("menuKinds = %v, want %v", got, want)
@@ -33,7 +34,7 @@ func TestImageMenuOffersOnlyImageSteps(t *testing.T) {
 		}
 	}
 	out := viewText(m)
-	for _, s := range []string{"Image", "Resolution", "File name", "Raw args", "Run"} {
+	for _, s := range []string{"Image", "Resolution", "Crop", "Rotate / flip", "File name", "Raw args", "Run"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("MENU is missing %q, got:\n%s", s, out)
 		}
@@ -105,5 +106,41 @@ func TestImageResolutionPresetsLimitTheLongestSide(t *testing.T) {
 	m = step(t, m, key("enter"))
 	if s, ok := m.pipeline.Find(pipeline.KindResolution); !ok || s != (pipeline.Resolution{Width: 2048, Height: 2048}) {
 		t.Errorf("first preset added %v, want a 2048×2048 fit box", s)
+	}
+}
+
+func TestCropAndRotateCustomTextRoundTrips(t *testing.T) {
+	for _, s := range []pipeline.Step{
+		pipeline.Crop{AspectW: 16, AspectH: 9},
+		pipeline.Crop{Width: 800, Height: 600},
+		pipeline.Crop{Width: 800, Height: 600, X: 10, Y: 20, Offset: true},
+		pipeline.Rotate{Degrees: 90},
+		pipeline.Rotate{Flip: pipeline.FlipHorizontal},
+		pipeline.Rotate{Degrees: 270, Flip: pipeline.FlipVertical},
+	} {
+		text := customPrefill(s)
+		got, err := parseCustom(s.Kind(), text)
+		if err != nil || got != s {
+			t.Errorf("%+v prefills %q, which parses back to %+v, %v", s, text, got, err)
+		}
+	}
+}
+
+func TestCropAndRotatePresetsAddSteps(t *testing.T) {
+	for _, tt := range []struct {
+		kind pipeline.Kind
+		want pipeline.Step
+	}{
+		{pipeline.KindCrop, pipeline.Crop{AspectW: 1, AspectH: 1}},
+		{pipeline.KindRotate, pipeline.Rotate{Degrees: 90}},
+	} {
+		for _, session := range []app.Session{imageSession(pipeline.New()), testSession(pipeline.New())} {
+			m := resized(New(session), 100, 30)
+			m = openMenu(t, m, tt.kind)
+			m = step(t, m, key("enter"))
+			if got, ok := m.pipeline.Find(tt.kind); !ok || got != tt.want {
+				t.Errorf("%s on %s: first preset added %v, want %+v", tt.kind.Label(), session.Input, got, tt.want)
+			}
+		}
 	}
 }

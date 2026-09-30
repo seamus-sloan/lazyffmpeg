@@ -48,12 +48,13 @@ type menuSection struct {
 // input and for an image input, in display order.
 var (
 	videoMenu = []menuSection{
-		{"Video", []pipeline.Kind{pipeline.KindResolution, pipeline.KindSpeed, pipeline.KindTrim, pipeline.KindFrameRate}},
+		{"Video", []pipeline.Kind{pipeline.KindResolution, pipeline.KindCrop, pipeline.KindRotate,
+			pipeline.KindSpeed, pipeline.KindTrim, pipeline.KindFrameRate}},
 		{"Output", []pipeline.Kind{pipeline.KindEncoder, pipeline.KindQuality, pipeline.KindAudio,
 			pipeline.KindContainer, pipeline.KindFilename, pipeline.KindRawArgs}},
 	}
 	imageMenu = []menuSection{
-		{"Image", []pipeline.Kind{pipeline.KindResolution}},
+		{"Image", []pipeline.Kind{pipeline.KindResolution, pipeline.KindCrop, pipeline.KindRotate}},
 		{"Output", []pipeline.Kind{pipeline.KindFilename, pipeline.KindRawArgs}},
 	}
 )
