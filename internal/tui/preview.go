@@ -108,16 +108,22 @@ func (m Model) previewRange() (float64, float64) {
 	return 0, m.session.Info.Duration
 }
 
-func (m Model) previewRequest() preview.Request {
-	cols, rows := m.previewBoxSize()
-	filter := ""
+// previewFrame returns the input time and spatial filter of the frame the
+// preview shows: the pipeline's spatial filters apply in result mode.
+func (m Model) previewFrame() (t float64, filter string) {
 	if m.preview.resultMode {
 		filter = pipeline.SpatialVideoFilter(m.pipeline)
 	}
 	lo, hi := m.previewRange()
+	return clampRenderTime(m.preview.time, lo, hi, m.session.Info.Video.FPS), filter
+}
+
+func (m Model) previewRequest() preview.Request {
+	cols, rows := m.previewBoxSize()
+	t, filter := m.previewFrame()
 	req := preview.Request{
 		Input:  m.session.Input,
-		Time:   clampRenderTime(m.preview.time, lo, hi, m.session.Info.Video.FPS),
+		Time:   t,
 		Filter: filter,
 		Cols:   cols,
 		Rows:   rows,

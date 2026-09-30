@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atotto/clipboard"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
@@ -98,10 +99,11 @@ type Model struct {
 	quitting        bool
 	notice          string // a transient hint shown in the footer for one frame
 
-	listFn  ListFunc
-	probeFn ProbeFunc
-	runFn   RunFunc
-	runWG   *sync.WaitGroup // owned by Run; tracks in-flight runs across program exit
+	listFn      ListFunc
+	probeFn     ProbeFunc
+	runFn       RunFunc
+	clipboardFn ClipboardFunc
+	runWG       *sync.WaitGroup // owned by Run; tracks in-flight runs across program exit
 }
 
 // Option configures a Model built by New.
@@ -135,6 +137,8 @@ func New(s app.Session, opts ...Option) Model {
 		listFn:   picker.List,
 		probeFn:  probe.Run,
 		runFn:    runner.Run,
+
+		clipboardFn: clipboard.WriteAll,
 
 		renderFn:          preview.Render,
 		rendererAvailable: preview.Available(),
@@ -237,6 +241,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case previewTickMsg:
 		return m.handlePreviewTick(msg)
+
+	case symbolsCopiedMsg:
+		return m.handleSymbolsCopied(msg)
 	}
 	return m, nil
 }
@@ -308,6 +315,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.setTrimBound(true)
 	case "o":
 		return m.setTrimBound(false)
+	case "y":
+		return m.copySymbols()
 	}
 
 	if m.focus == focusMenu {

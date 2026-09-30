@@ -206,6 +206,73 @@ func TestRenderImageProducesKittySequence(t *testing.T) {
 	}
 }
 
+func TestFrameArgsForPlain(t *testing.T) {
+	got := FrameArgs(Request{Input: "a.mov", Time: 1, Filter: "scale=640:360", Cols: 100, Plain: true})
+	wantVF := "scale=640:360,scale='min(iw,800)':-1"
+	for i, a := range got {
+		if a == "-vf" {
+			if got[i+1] != wantVF {
+				t.Errorf("-vf = %q, want %q", got[i+1], wantVF)
+			}
+			return
+		}
+	}
+	t.Fatal("-vf not present in argv")
+}
+
+func TestChafaArgsForPlain(t *testing.T) {
+	got := ChafaArgs(Request{Cols: 100, Rows: 20, Colors: "full", Plain: true})
+	want := []string{
+		"chafa",
+		"--format", "symbols",
+		"--size", "100x",
+		"--animate", "off",
+		"--polite", "on",
+		"--colors", "none",
+		"--symbols", "braille",
+		"--dither", "diffusion",
+		"--work", "9",
+		"-",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ChafaArgs = %v, want %v", got, want)
+	}
+}
+
+func TestRenderPlainIsBrailleTextOfTheFramesShape(t *testing.T) {
+	testclip.RequireTools(t, "ffmpeg", "ffprobe", "chafa")
+	path := testclip.Make(t, testclip.Spec{Width: 64, Height: 48, Seconds: 1})
+
+	out, err := Render(context.Background(), Request{Input: path, Time: 0.1, Cols: 40, Plain: true})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(out, "\x1b") {
+		t.Errorf("plain render holds escape sequences: %q", out)
+	}
+	lines := strings.Split(out, "\n")
+	// 40 columns of a 4:3 frame, in cells twice as tall as they are wide.
+	if len(lines) != 15 {
+		t.Errorf("plain render is %d lines, want 15", len(lines))
+	}
+	inked := false
+	for i, line := range lines {
+		runes := []rune(line)
+		if len(runes) != 40 {
+			t.Errorf("line %d is %d columns, want 40", i, len(runes))
+		}
+		for _, r := range runes {
+			if r < 0x2800 || r > 0x28ff {
+				t.Fatalf("line %d holds %q, want only braille", i, r)
+			}
+			inked = inked || r != 0x2800
+		}
+	}
+	if !inked {
+		t.Error("plain render is blank")
+	}
+}
+
 func TestRenderProducesFrame(t *testing.T) {
 	testclip.RequireTools(t, "ffmpeg", "ffprobe", "chafa")
 	path := testclip.Make(t, testclip.Spec{Width: 64, Height: 48, Seconds: 1})

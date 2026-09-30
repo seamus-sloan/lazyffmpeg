@@ -500,3 +500,41 @@ func contains(haystack, needle string) bool {
 		return false
 	})()
 }
+
+func TestParseSymbols(t *testing.T) {
+	cfg, err := Parse([]string{"in.mov", "--symbols", "1:02.5"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !cfg.Symbols || cfg.SymbolsTime != 62.5 || cfg.SymbolsWidth != DefaultSymbolsWidth {
+		t.Errorf("cfg = %+v, want Symbols at 62.5s, %d wide", cfg, DefaultSymbolsWidth)
+	}
+
+	cfg, err = Parse([]string{"in.mov", "--symbols-width", "60", "--symbols", "3"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !cfg.Symbols || cfg.SymbolsTime != 3 || cfg.SymbolsWidth != 60 {
+		t.Errorf("cfg = %+v, want Symbols at 3s, 60 wide", cfg)
+	}
+}
+
+func TestParseSymbolsUsageErrors(t *testing.T) {
+	cases := map[string][]string{
+		"bad time":              {"in.mov", "--symbols", "soon"},
+		"zero width":            {"in.mov", "--symbols", "1", "--symbols-width", "0"},
+		"bad width":             {"in.mov", "--symbols", "1", "--symbols-width", "wide"},
+		"width without symbols": {"in.mov", "--symbols-width", "60"},
+		"with a step flag":      {"in.mov", "--symbols", "1", "--speed", "2"},
+		"with -o":               {"in.mov", "--symbols", "1", "-o", "out.txt"},
+		"with --in-place":       {"in.mov", "--symbols", "1", "--in-place"},
+		"with --force":          {"in.mov", "--symbols", "1", "--force"},
+		"with --tui":            {"in.mov", "--symbols", "1", "--tui"},
+		"with --dry-run":        {"in.mov", "--symbols", "1", "--dry-run"},
+	}
+	for name, args := range cases {
+		if _, err := Parse(args); !errors.Is(err, ErrUsage) {
+			t.Errorf("%s: err = %v, want ErrUsage", name, err)
+		}
+	}
+}

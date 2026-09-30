@@ -32,6 +32,7 @@ lazyff <input> --speed 2 -o out.mp4                    # explicit output path
 lazyff <input> --speed 2 --name demo                   # name the output (demo.<ext>, next to the input)
 lazyff <input> --speed 2 --in-place                    # encode to a temp file, then replace the input
 lazyff <input> --speed 2 --force                       # overwrite an existing output without asking
+lazyff <input> --symbols 12.5 > frame.txt              # the frame at 12.5s as plain-text symbols
 ```
 
 Step flags become pipeline steps **in the order given on the command
@@ -65,6 +66,11 @@ and moves straight to the editor, keeping any step flags and `-o`/
 
 Other flags: `-o PATH`, `--in-place`, `--force`, `--tui`, `--dry-run`,
 `--version`, `-h`/`--help`.
+
+`--symbols T` prints the frame at time `T` (seconds or `[hh:]mm:ss[.ms]`)
+as plain text and runs nothing: braille dots dithered for shading, 100
+columns wide or `--symbols-width N`, as many rows as the frame needs. It
+needs `chafa` and takes no step flags or output flags.
 
 ### Output file rules
 
@@ -133,6 +139,7 @@ headless fails unless `--force`, the TUI asks first.
 | `v` | toggle original/result (result applies the pipeline's spatial filters and limits the range to what a Trim step keeps) |
 | `space` | play/pause |
 | `i`/`o` | set the trim start/end at the current preview position |
+| `y` | copy the previewed frame to the clipboard as plain-text symbols, as wide as the terminal |
 
 ### Step modal
 
