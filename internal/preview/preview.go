@@ -62,16 +62,20 @@ func FrameArgs(r Request) []string {
 	if r.Filter != "" {
 		vf = r.Filter + "," + fit
 	}
-	return []string{
-		"ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
-		"-ss", units.FormatNumber(r.Time),
+	argv := []string{"ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin"}
+	// No seek at the start: seeking a JPEG still, even to 0, drops its
+	// only frame.
+	if r.Time > 0 {
+		argv = append(argv, "-ss", units.FormatNumber(r.Time))
+	}
+	return append(argv,
 		"-i", r.Input,
 		"-frames:v", "1",
 		"-vf", vf,
 		"-f", "image2pipe",
 		"-c:v", "png",
 		"-",
-	}
+	)
 }
 
 // ChafaArgs is the chafa argv that renders a PNG read from stdin as
@@ -123,6 +127,9 @@ func Render(ctx context.Context, r Request) (string, error) {
 	ffCmd.Stderr = &ffStderr
 	if err := ffCmd.Run(); err != nil {
 		return "", fmt.Errorf("ffmpeg: %v: %s", err, strings.TrimSpace(ffStderr.String()))
+	}
+	if frame.Len() == 0 { // ffmpeg exits 0 when it encodes nothing
+		return "", fmt.Errorf("ffmpeg: no frame at %s", units.FormatNumber(r.Time))
 	}
 
 	if r.ImageID != 0 {

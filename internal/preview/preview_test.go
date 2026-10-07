@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"math/rand/v2"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -236,6 +237,28 @@ func TestChafaArgsForPlain(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ChafaArgs = %v, want %v", got, want)
+	}
+}
+
+// ffmpeg seeking a JPEG still to 0 drops its only frame, yet exits 0
+// (one this small slips through: at 64x48 it decodes fine).
+func TestRenderJPEGStillAtStart(t *testing.T) {
+	path := testclip.MakeImage(t, "pic.jpg", 640, 480)
+
+	seq, err := Render(context.Background(), Request{
+		Input: path, Time: 0, Cols: 20, Rows: 10, ImageID: 3, PixelWidth: 200, PixelHeight: 200,
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.HasPrefix(seq, "\x1b_Ga=T") {
+		t.Errorf("Render = %q, want a kitty graphics sequence", seq)
+	}
+}
+
+func TestFrameArgsOmitsSeekAtStart(t *testing.T) {
+	if got := FrameArgs(Request{Input: "a.jpg", Time: 0, Cols: 60, Rows: 20}); slices.Contains(got, "-ss") {
+		t.Errorf("FrameArgs at time 0 = %v, want no -ss", got)
 	}
 }
 
