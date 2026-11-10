@@ -17,7 +17,7 @@ import (
 
 func noLazyffTemps(t *testing.T, dir string) {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(dir, ".lazyff-*"))
+	matches, err := filepath.Glob(filepath.Join(dir, "lazyff-tmp-*"))
 	if err != nil {
 		t.Fatalf("glob: %v", err)
 	}
@@ -123,6 +123,32 @@ func TestRunReplacesOnlyAfterSuccess(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0600 {
 		t.Errorf("mode = %v, want 0600 (the replaced file's original mode)", fi.Mode().Perm())
+	}
+	noLazyffTemps(t, dir)
+}
+
+// Finder caches a file as hidden by its file ID, so a temp file named with a
+// leading dot stays hidden in Finder after it is renamed to the output.
+func TestRunWritesToANonHiddenTempFile(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "record")
+	fake := filepath.Join(dir, "fake-ffmpeg")
+	script := "#!/bin/sh\nfor a; do last=$a; done\necho \"$last\" > " + record + "\necho data > \"$last\"\n"
+	if err := os.WriteFile(fake, []byte(script), 0755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	job := runner.Job{Argv: []string{fake, filepath.Join(dir, "out.png")}, Output: filepath.Join(dir, "out.png")}
+
+	if _, err := runner.Run(context.Background(), job, func(runner.Progress) {}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	got, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if name := filepath.Base(string(bytes.TrimSpace(got))); name[0] == '.' {
+		t.Errorf("Run wrote to temp file %q, want a name without a leading dot", name)
 	}
 	noLazyffTemps(t, dir)
 }

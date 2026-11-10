@@ -67,7 +67,7 @@ func Run(ctx context.Context, job Job, onProgress func(Progress)) (Result, error
 
 	dir := filepath.Dir(job.Output)
 	ext := filepath.Ext(job.Output)
-	tmp, err := os.CreateTemp(dir, ".lazyff-*"+ext)
+	tmp, err := os.CreateTemp(dir, "lazyff-tmp-*"+ext)
 	if err != nil {
 		return Result{}, fmt.Errorf("runner: create temp file: %w", err)
 	}

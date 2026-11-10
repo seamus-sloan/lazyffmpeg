@@ -583,7 +583,7 @@ func TestMainInPlace(t *testing.T) {
 		t.Errorf("in-place output duration = %v, want ~%v (halved)", outInfo.Duration, wantDur)
 	}
 
-	matches, _ := filepath.Glob(filepath.Join(dir, ".lazyff-*"))
+	matches, _ := filepath.Glob(filepath.Join(dir, "lazyff-tmp-*"))
 	if len(matches) != 0 {
 		t.Errorf("leftover temp files: %v", matches)
 	}
